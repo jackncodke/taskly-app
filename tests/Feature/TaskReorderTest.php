@@ -58,7 +58,7 @@ test('a new task goes to the top and pushes the others down', function () {
     $existing = Task::factory()->for($project)->create();
 
     $this->actingAs($project->owner)
-        ->post("/projects/{$project->id}/tasks", ['title' => 'Recém-criada']);
+        ->post("/projects/{$project->id}/tasks", taskPayload(['title' => 'Recém-criada']));
 
     $created = $project->tasks()->where('title', 'Recém-criada')->sole();
 

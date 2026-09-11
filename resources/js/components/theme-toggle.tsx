@@ -1,5 +1,7 @@
+import { headerButtonClasses, headerButtonSize } from '@/components/buttons';
 import { MoonIcon, SunIcon } from '@/components/icons';
 import { useTheme } from '@/lib/theme';
+import { cn } from '@/lib/utils';
 
 /**
  * Icon-only switch between the light and dark themes.
@@ -19,7 +21,7 @@ export default function ThemeToggle() {
             onClick={() => setTheme(isDark ? 'light' : 'dark')}
             aria-label={label}
             title={label}
-            className="rounded-md border border-[#e3e3e0] p-1.5 transition-colors hover:bg-[#f4f4f2] dark:border-[#3E3E3A] dark:hover:bg-[#161615]"
+            className={cn(headerButtonClasses, headerButtonSize)}
         >
             {isDark ? (
                 <SunIcon className="size-4" />

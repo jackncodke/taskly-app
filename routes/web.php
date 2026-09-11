@@ -26,6 +26,11 @@ Route::middleware('auth')->group(function () {
 
     Route::post('projects/{project}/tasks', [TaskController::class, 'store'])->name('tasks.store');
     Route::patch('projects/{project}/tasks/order', [TaskController::class, 'reorder'])->name('tasks.order');
+    // Scoped so a task from another project is a 404 rather than something the
+    // permutation rule has to catch.
+    Route::patch('projects/{project}/tasks/{task}/move', [TaskController::class, 'move'])
+        ->scopeBindings()
+        ->name('tasks.move');
     Route::patch('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
     Route::patch('tasks/{task}/status', [TaskController::class, 'updateStatus'])->name('tasks.status');
     Route::delete('tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');

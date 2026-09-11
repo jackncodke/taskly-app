@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreTaskRequest;
 use App\Models\Project;
 use App\Models\Task;
 use App\TaskStatus;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,6 +24,7 @@ class DashboardController extends Controller
             'selectedProject' => null,
             'tasks' => [],
             'statuses' => TaskStatus::options(),
+            'now' => $this->earliestDeadline(),
         ]);
     }
 
@@ -47,7 +50,21 @@ class DashboardController extends Controller
                 ->map($this->taskPayload(...))
                 ->all(),
             'statuses' => TaskStatus::options(),
+            'now' => $this->earliestDeadline(),
         ]);
+    }
+
+    /**
+     * The earliest deadline the form may offer, as the `datetime-local` input
+     * wants it.
+     *
+     * Sent from here rather than read off the browser's clock so the `min` the
+     * picker enforces and the rule the server enforces are the same instant.
+     */
+    private function earliestDeadline(): string
+    {
+        return Carbon::parse(StoreTaskRequest::earliestDeadline())
+            ->format('Y-m-d\TH:i');
     }
 
     /**

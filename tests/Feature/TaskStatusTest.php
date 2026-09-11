@@ -9,7 +9,7 @@ test('a new task starts as not started', function () {
     $project = Project::factory()->create();
 
     $this->actingAs($project->owner)
-        ->post("/projects/{$project->id}/tasks", ['title' => 'Nova']);
+        ->post("/projects/{$project->id}/tasks", taskPayload(['title' => 'Nova']));
 
     expect($project->tasks()->sole()->status)->toBe(TaskStatus::NotStarted);
 });

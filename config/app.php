@@ -78,9 +78,12 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // Defaults to the only locale this application ships translations for:
+    // falling back to 'en' without a lang/en directory would surface raw keys
+    // such as "validation.string" instead of a message.
+    'locale' => env('APP_LOCALE', 'pt_BR'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'pt_BR'),
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 

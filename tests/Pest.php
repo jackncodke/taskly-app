@@ -48,3 +48,24 @@ function something()
 {
     // ..
 }
+
+/**
+ * A task payload with every required field filled in.
+ *
+ * The form requires a title, both descriptions and a deadline, so a test that
+ * is not about validation still has to send all four. This keeps that noise in
+ * one place, and keeps the deadline in the future, which the rules also demand.
+ *
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function taskPayload(array $overrides = []): array
+{
+    return [
+        'title' => 'Tarefa de teste',
+        'short_description' => 'Um resumo de uma linha',
+        'description' => 'A descrição completa da tarefa.',
+        'due_at' => now()->addWeek()->format('Y-m-d\TH:i'),
+        ...$overrides,
+    ];
+}

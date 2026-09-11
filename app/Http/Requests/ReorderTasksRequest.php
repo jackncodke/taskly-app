@@ -75,7 +75,7 @@ class ReorderTasksRequest extends FormRequest
     /**
      * The project whose tasks are being reordered.
      */
-    private function project(): Project
+    protected function project(): Project
     {
         $project = $this->route('project');
 

@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { readStored, writeStored } from '@/lib/storage';
 
 export type Theme = 'light' | 'dark';
 
@@ -23,18 +24,10 @@ function systemTheme(): Theme {
         : 'light';
 }
 
-/**
- * Storage throws rather than returning null when it is unavailable, such as in
- * private mode or with site data blocked, so every access is guarded.
- */
 function readStoredTheme(): Theme | null {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = readStored(STORAGE_KEY);
 
-        return stored === 'dark' || stored === 'light' ? stored : null;
-    } catch {
-        return null;
-    }
+    return stored === 'dark' || stored === 'light' ? stored : null;
 }
 
 /**
@@ -68,12 +61,7 @@ function subscribe(onStoreChange: () => void): () => void {
 export function setTheme(theme: Theme): void {
     // A failed write only costs persistence across reloads: the theme still
     // applies for this session through `unpersistedTheme`.
-    try {
-        localStorage.setItem(STORAGE_KEY, theme);
-        unpersistedTheme = null;
-    } catch {
-        unpersistedTheme = theme;
-    }
+    unpersistedTheme = writeStored(STORAGE_KEY, theme) ? null : theme;
 
     applyTheme(theme);
     listeners.forEach((listener) => listener());

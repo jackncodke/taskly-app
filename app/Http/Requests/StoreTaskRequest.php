@@ -43,6 +43,18 @@ class StoreTaskRequest extends FormRequest
     }
 
     /**
+     * The earliest deadline a task may be given.
+     *
+     * Rounded down to the minute because the form's `datetime-local` input has
+     * no seconds: comparing against the current second would reject the very
+     * minute the picker is offering as its earliest choice.
+     */
+    public static function earliestDeadline(): string
+    {
+        return now()->startOfMinute()->toDateTimeString();
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, array<int, mixed>>
@@ -51,9 +63,9 @@ class StoreTaskRequest extends FormRequest
     {
         return [
             'title' => ['required', 'string', 'max:255'],
-            'short_description' => ['nullable', 'string', 'max:255'],
-            'description' => ['nullable', 'string', 'max:10000'],
-            'due_at' => ['nullable', 'date'],
+            'short_description' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:10000'],
+            'due_at' => ['required', 'date', 'after_or_equal:'.self::earliestDeadline()],
             'tags' => ['array', 'max:10'],
             'tags.*' => ['string', 'max:30'],
             'attachments' => ['array', 'max:10'],
@@ -75,9 +87,13 @@ class StoreTaskRequest extends FormRequest
         return [
             'title.required' => 'Informe o título da tarefa.',
             'title.max' => 'O título deve ter no máximo :max caracteres.',
+            'short_description.required' => 'Informe a descrição curta da tarefa.',
             'short_description.max' => 'A descrição curta deve ter no máximo :max caracteres.',
+            'description.required' => 'Informe a descrição completa da tarefa.',
             'description.max' => 'A descrição completa deve ter no máximo :max caracteres.',
+            'due_at.required' => 'Informe o prazo da tarefa.',
             'due_at.date' => 'Informe um prazo válido.',
+            'due_at.after_or_equal' => 'O prazo não pode ser anterior à data e hora atuais.',
             'tags.max' => 'Use no máximo :max tags.',
             'tags.*.max' => 'Cada tag deve ter no máximo :max caracteres.',
             'attachments.max' => 'Envie no máximo :max arquivos por vez.',

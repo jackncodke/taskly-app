@@ -3,6 +3,7 @@ import { Form, router } from '@inertiajs/react';
 import { destroy as destroyAttachment } from '@/actions/App/Http/Controllers/TaskAttachmentController';
 import {
     destroy,
+    move,
     reorder,
     store,
     update,
@@ -15,18 +16,13 @@ import {
     primaryButtonClasses,
     secondaryButtonClasses,
 } from '@/components/buttons';
-import {
-    ClockIcon,
-    CloseIcon,
-    GripIcon,
-    PaperclipIcon,
-    PencilIcon,
-    TrashIcon,
-} from '@/components/icons';
+import { GripIcon } from '@/components/icons';
 import Modal from '@/components/modal';
-import TagChip from '@/components/tag-chip';
+import TaskBoard from '@/components/task-board';
+import TaskCard, { AttachmentChip, styleFor } from '@/components/task-card';
 import TextField from '@/components/text-field';
 import TextareaField from '@/components/textarea-field';
+import type { TaskView } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
 import type { Project, StatusOption, Task, TaskAttachment } from '@/types';
 
@@ -35,23 +31,6 @@ type Dialog =
     | { type: 'create' }
     | { type: 'edit'; taskId: number }
     | { type: 'delete'; taskId: number };
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1024) {
-        return `${bytes} B`;
-    }
-
-    const units = ['KB', 'MB', 'GB'];
-    let value = bytes / 1024;
-    let unit = 0;
-
-    while (value >= 1024 && unit < units.length - 1) {
-        value /= 1024;
-        unit += 1;
-    }
-
-    return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
-}
 
 /**
  * Validation for a file list arrives keyed by position — `attachments.0`,
@@ -67,95 +46,19 @@ function firstErrorFor(
     )?.[1];
 }
 
-function AttachmentChip({
-    attachment,
-    onRemove,
-}: {
-    attachment: TaskAttachment;
-    onRemove?: () => void;
-}) {
-    return (
-        <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#e3e3e0] bg-white py-1 pr-1 pl-2 text-[12px] dark:border-[#3E3E3A] dark:bg-[#161615]">
-            {attachment.is_image ? (
-                <img
-                    src={attachment.url}
-                    alt=""
-                    className="size-6 shrink-0 rounded object-cover"
-                />
-            ) : (
-                <PaperclipIcon className="size-3.5 shrink-0 text-[#706f6c] dark:text-[#A1A09A]" />
-            )}
-
-            <a
-                href={attachment.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 truncate text-[#1b1b18] hover:underline dark:text-[#EDEDEC]"
-                title={`${attachment.name} (${formatBytes(attachment.size)})`}
-            >
-                {attachment.name}
-            </a>
-
-            {onRemove ? (
-                <button
-                    type="button"
-                    onClick={onRemove}
-                    aria-label={`Remover anexo ${attachment.name}`}
-                    title="Remover anexo"
-                    className={iconButtonClasses}
-                >
-                    <CloseIcon className="size-3.5" />
-                </button>
-            ) : null}
-        </span>
-    );
-}
-
-/**
- * Purely cosmetic tint per status, applied to the whole card and to its
- * dropdown. Kept in one place so the two never disagree about a colour.
- *
- * The tints are pale on purpose: the card still has to read as a task rather
- * than as a warning, and the text on top of it keeps its normal contrast.
- */
-type StatusStyle = { card: string; select: string };
-
-const neutralStatusStyle: StatusStyle = {
-    card: 'border-[#e3e3e0] dark:border-[#3E3E3A]',
-    select: 'border-[#e3e3e0] text-[#706f6c] dark:border-[#3E3E3A] dark:text-[#A1A09A]',
-};
-
-const statusStyles: Record<string, StatusStyle> = {
-    in_progress: {
-        card: 'border-blue-300 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40',
-        select: 'border-blue-300 text-blue-800 dark:border-blue-800 dark:text-blue-300',
-    },
-    completed: {
-        card: 'border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/40',
-        select: 'border-green-300 text-green-800 dark:border-green-800 dark:text-green-300',
-    },
-    cancelled: {
-        card: 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40',
-        select: 'border-red-300 text-red-800 dark:border-red-800 dark:text-red-300',
-    },
-};
-
-/**
- * An unknown status falls back to the neutral look, so a case added to the
- * enum renders sensibly before this map knows about it.
- */
-function styleFor(status: string): StatusStyle {
-    return statusStyles[status] ?? neutralStatusStyle;
-}
-
 export default function TaskList({
     project,
     tasks,
     statuses,
+    view,
+    now,
 }: {
     project: Project;
     tasks: Task[];
     statuses: StatusOption[];
+    view: TaskView;
+    /** Earliest deadline the picker may offer, from the server's clock. */
+    now: string;
 }) {
     const [dialog, setDialog] = useState<Dialog>({ type: 'none' });
 
@@ -232,6 +135,56 @@ export default function TaskList({
 
     const indexOf = (id: number) => items.findIndex((task) => task.id === id);
 
+    /**
+     * Move a card on the board: a status change and a reordering at once.
+     *
+     * The board's columns are this same list filtered by status, so a card is
+     * placed by splicing it into the one global order — in front of the card it
+     * was dropped on, or after the last card of the target column when it was
+     * dropped on empty space. Ordering the whole list by status instead would
+     * have the board silently rearrange the list view.
+     */
+    const moveToStatus = (
+        task: Task,
+        status: string,
+        beforeId: number | null,
+    ) => {
+        const rest = items.filter((item) => item.id !== task.id);
+
+        const at = () => {
+            if (beforeId !== null) {
+                const before = rest.findIndex((item) => item.id === beforeId);
+
+                return before < 0 ? rest.length : before;
+            }
+
+            // Dropped on empty space: one past the column's last card, or the
+            // end of the list when that column has none.
+            const last = rest.findLastIndex((item) => item.status === status);
+
+            return last < 0 ? rest.length : last + 1;
+        };
+
+        const reordered = [...rest];
+        reordered.splice(at(), 0, { ...task, status });
+
+        // Nothing actually moved, so there is nothing to save.
+        if (
+            task.status === status &&
+            reordered.every((item, index) => item.id === items[index].id)
+        ) {
+            return;
+        }
+
+        setItems(reordered);
+
+        router.patch(
+            move.url({ project: project.id, task: task.id }),
+            { status, tasks: reordered.map((item) => item.id) },
+            { preserveScroll: true, preserveState: true },
+        );
+    };
+
     return (
         <section className="flex min-w-0 flex-1 flex-col gap-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -257,6 +210,19 @@ export default function TaskList({
                 <p className="rounded-md border border-dashed border-[#e3e3e0] p-6 text-center text-[13px] text-[#706f6c] dark:border-[#3E3E3A] dark:text-[#A1A09A]">
                     Adicione a primeira tarefa deste projeto.
                 </p>
+            ) : view === 'board' ? (
+                <TaskBoard
+                    items={items}
+                    statuses={statuses}
+                    onEdit={(task) =>
+                        setDialog({ type: 'edit', taskId: task.id })
+                    }
+                    onDelete={(task) =>
+                        setDialog({ type: 'delete', taskId: task.id })
+                    }
+                    onStatusChange={changeStatus}
+                    onMove={moveToStatus}
+                />
             ) : (
                 <ul className="flex flex-col gap-3">
                     {items.map((task, index) => (
@@ -305,154 +271,58 @@ export default function TaskList({
                                     'border-[#1b1b18] dark:border-[#EDEDEC]',
                             )}
                         >
-                            <div className="flex items-start gap-2">
-                                <button
-                                    type="button"
-                                    onMouseDown={() => setHandledId(task.id)}
-                                    onMouseUp={() => setHandledId(null)}
-                                    onKeyDown={(event) => {
-                                        if (
-                                            event.key !== 'ArrowUp' &&
-                                            event.key !== 'ArrowDown'
-                                        ) {
-                                            return;
+                            <TaskCard
+                                task={task}
+                                statuses={statuses}
+                                onEdit={() =>
+                                    setDialog({ type: 'edit', taskId: task.id })
+                                }
+                                onDelete={() =>
+                                    setDialog({
+                                        type: 'delete',
+                                        taskId: task.id,
+                                    })
+                                }
+                                onStatusChange={(status) =>
+                                    changeStatus(task, status)
+                                }
+                                handle={
+                                    <button
+                                        type="button"
+                                        onMouseDown={() =>
+                                            setHandledId(task.id)
                                         }
+                                        onMouseUp={() => setHandledId(null)}
+                                        onKeyDown={(event) => {
+                                            if (
+                                                event.key !== 'ArrowUp' &&
+                                                event.key !== 'ArrowDown'
+                                            ) {
+                                                return;
+                                            }
 
-                                        // Reordering without a mouse, which
-                                        // dragging alone does not allow.
-                                        event.preventDefault();
-                                        moveTask(
-                                            index,
-                                            event.key === 'ArrowDown'
-                                                ? index + 1
-                                                : index - 1,
-                                        );
-                                    }}
-                                    aria-label={`Reordenar ${task.title}`}
-                                    title="Arraste para reordenar, ou use as setas do teclado"
-                                    className={cn(
-                                        iconButtonClasses,
-                                        'cursor-grab touch-none active:cursor-grabbing',
-                                    )}
-                                >
-                                    <GripIcon className="size-4" />
-                                </button>
-
-                                <h2 className="min-w-0 flex-1 text-[15px] font-medium break-words">
-                                    {task.title}
-                                </h2>
-
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setDialog({
-                                            type: 'edit',
-                                            taskId: task.id,
-                                        })
-                                    }
-                                    aria-label={`Editar ${task.title}`}
-                                    title="Editar"
-                                    className={iconButtonClasses}
-                                >
-                                    <PencilIcon className="size-4" />
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setDialog({
-                                            type: 'delete',
-                                            taskId: task.id,
-                                        })
-                                    }
-                                    aria-label={`Excluir ${task.title}`}
-                                    title="Excluir"
-                                    className={iconButtonClasses}
-                                >
-                                    <TrashIcon className="size-4" />
-                                </button>
-                            </div>
-
-                            {task.short_description ? (
-                                <p className="text-[13px] break-words text-[#706f6c] dark:text-[#A1A09A]">
-                                    {task.short_description}
-                                </p>
-                            ) : null}
-
-                            {task.description ? (
-                                <details className="text-[13px]">
-                                    <summary className="cursor-pointer text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
-                                        Descrição completa
-                                    </summary>
-                                    <p className="mt-2 whitespace-pre-wrap text-[#1b1b18] dark:text-[#EDEDEC]">
-                                        {task.description}
-                                    </p>
-                                </details>
-                            ) : null}
-
-                            {task.due_at_label ? (
-                                <p className="flex items-center gap-1.5 text-[12px] text-[#706f6c] dark:text-[#A1A09A]">
-                                    <ClockIcon className="size-3.5" />
-                                    Prazo: {task.due_at_label}
-                                </p>
-                            ) : null}
-
-                            {task.tags.length > 0 ? (
-                                <ul className="flex flex-wrap gap-1.5">
-                                    {task.tags.map((tag) => (
-                                        <li key={tag}>
-                                            <TagChip tag={tag} />
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : null}
-
-                            {task.attachments.length > 0 ? (
-                                <ul className="flex flex-wrap gap-2">
-                                    {task.attachments.map((attachment) => (
-                                        <li
-                                            key={attachment.id}
-                                            className="min-w-0"
-                                        >
-                                            <AttachmentChip
-                                                attachment={attachment}
-                                            />
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : null}
-
-                            <div className="flex justify-end">
-                                <label
-                                    htmlFor={`status-${task.id}`}
-                                    className="sr-only"
-                                >
-                                    Status de {task.title}
-                                </label>
-
-                                <select
-                                    id={`status-${task.id}`}
-                                    value={task.status}
-                                    onChange={(event) =>
-                                        changeStatus(task, event.target.value)
-                                    }
-                                    className={cn(
-                                        'rounded-md border bg-white px-2 py-1 text-[12px] font-medium outline-none',
-                                        'focus:border-[#1b1b18] focus:ring-2 focus:ring-[#1b1b18]/10',
-                                        'dark:bg-[#161615] dark:focus:border-[#EDEDEC]',
-                                        styleFor(task.status).select,
-                                    )}
-                                >
-                                    {statuses.map((option) => (
-                                        <option
-                                            key={option.value}
-                                            value={option.value}
-                                        >
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                                            // Reordering without a mouse,
+                                            // which dragging alone does not
+                                            // allow.
+                                            event.preventDefault();
+                                            moveTask(
+                                                index,
+                                                event.key === 'ArrowDown'
+                                                    ? index + 1
+                                                    : index - 1,
+                                            );
+                                        }}
+                                        aria-label={`Reordenar ${task.title}`}
+                                        title="Arraste para reordenar, ou use as setas do teclado"
+                                        className={cn(
+                                            iconButtonClasses,
+                                            'cursor-grab touch-none active:cursor-grabbing',
+                                        )}
+                                    >
+                                        <GripIcon className="size-4" />
+                                    </button>
+                                }
+                            />
                         </li>
                     ))}
                 </ul>
@@ -494,6 +364,7 @@ export default function TaskList({
                                 type="text"
                                 placeholder="Um resumo de uma linha"
                                 defaultValue={editing?.short_description ?? ''}
+                                required
                                 error={errors.short_description}
                             />
 
@@ -503,6 +374,7 @@ export default function TaskList({
                                 rows={4}
                                 placeholder="Detalhes, critérios de aceite, links…"
                                 defaultValue={editing?.description ?? ''}
+                                required
                                 error={errors.description}
                             />
 
@@ -510,7 +382,16 @@ export default function TaskList({
                                 label="Prazo"
                                 name="due_at"
                                 type="datetime-local"
+                                // A deadline a task already has may be older
+                                // than `now`, and keeping it is allowed, so the
+                                // picker must not refuse to show it back.
+                                min={
+                                    editing?.due_at && editing.due_at < now
+                                        ? editing.due_at
+                                        : now
+                                }
                                 defaultValue={editing?.due_at ?? ''}
+                                required
                                 error={errors.due_at}
                             />
 

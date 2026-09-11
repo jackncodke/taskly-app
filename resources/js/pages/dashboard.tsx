@@ -2,6 +2,8 @@ import { Form, Head, usePage } from '@inertiajs/react';
 import ProjectSidebar from '@/components/project-sidebar';
 import TaskList from '@/components/task-list';
 import ThemeToggle from '@/components/theme-toggle';
+import ViewToggle from '@/components/view-toggle';
+import { useTaskView } from '@/lib/task-view';
 import { logout } from '@/routes';
 import type { Project, StatusOption, Task } from '@/types';
 
@@ -10,13 +12,16 @@ export default function Dashboard({
     selectedProject,
     tasks,
     statuses,
+    now,
 }: {
     projects: Project[];
     selectedProject: Project | null;
     tasks: Task[];
     statuses: StatusOption[];
+    now: string;
 }) {
     const { auth } = usePage().props;
+    const [view, setView] = useTaskView();
 
     if (!auth.user) {
         return null;
@@ -35,6 +40,10 @@ export default function Dashboard({
                     </span>
 
                     <div className="flex items-center gap-2">
+                        {selectedProject ? (
+                            <ViewToggle view={view} onChange={setView} />
+                        ) : null}
+
                         <ThemeToggle />
 
                         <Form {...logout.form()}>
@@ -60,6 +69,8 @@ export default function Dashboard({
                                 project={selectedProject}
                                 tasks={tasks}
                                 statuses={statuses}
+                                view={view}
+                                now={now}
                             />
                         ) : (
                             <div className="flex flex-col gap-2">

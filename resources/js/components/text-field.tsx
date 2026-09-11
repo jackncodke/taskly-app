@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 import InputError from '@/components/input-error';
+import { nativeValidationHandlers } from '@/lib/native-validation';
 import { cn } from '@/lib/utils';
 
 type TextFieldProps = ComponentProps<'input'> & {
@@ -13,6 +14,9 @@ export default function TextField({
     name,
     error,
     className,
+    onInvalid,
+    onInput,
+    onChange,
     ...props
 }: TextFieldProps) {
     return (
@@ -26,6 +30,20 @@ export default function TextField({
 
             <input
                 {...props}
+                // Replaces the browser's English constraint bubbles. Ours runs
+                // first so a caller's own handler still sees the event.
+                onInvalid={(event) => {
+                    nativeValidationHandlers.onInvalid(event);
+                    onInvalid?.(event);
+                }}
+                onInput={(event) => {
+                    nativeValidationHandlers.onInput(event);
+                    onInput?.(event);
+                }}
+                onChange={(event) => {
+                    nativeValidationHandlers.onChange(event);
+                    onChange?.(event);
+                }}
                 id={name}
                 name={name}
                 aria-invalid={error ? true : undefined}

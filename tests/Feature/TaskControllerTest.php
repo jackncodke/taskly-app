@@ -30,26 +30,31 @@ describe('store', function () {
             ->and($task->tags)->toBe(['jurídico', 'urgente']);
     });
 
-    test('creates a task with only a title', function () {
+    test('requires a title, both descriptions and a deadline', function () {
         $project = Project::factory()->create();
 
         $this->actingAs($project->owner)
             ->post("/projects/{$project->id}/tasks", ['title' => 'Sem detalhes'])
-            ->assertRedirect();
+            ->assertInvalid(['short_description', 'description', 'due_at']);
 
-        $task = $project->tasks()->sole();
+        expect($project->tasks()->count())->toBe(0);
+    });
 
-        expect($task->short_description)->toBeNull()
-            ->and($task->description)->toBeNull()
-            ->and($task->due_at)->toBeNull()
-            ->and($task->tags)->toBe([]);
+    test('leaves tags optional', function () {
+        $project = Project::factory()->create();
+
+        $this->actingAs($project->owner)
+            ->post("/projects/{$project->id}/tasks", taskPayload())
+            ->assertValid();
+
+        expect($project->tasks()->sole()->tags)->toBe([]);
     });
 
     test('requires a title', function () {
         $project = Project::factory()->create();
 
         $this->actingAs($project->owner)
-            ->post("/projects/{$project->id}/tasks", ['title' => ''])
+            ->post("/projects/{$project->id}/tasks", taskPayload(['title' => '']))
             ->assertInvalid('title');
 
         expect($project->tasks()->count())->toBe(0);
@@ -59,10 +64,9 @@ describe('store', function () {
         $project = Project::factory()->create();
 
         $this->actingAs($project->owner)
-            ->post("/projects/{$project->id}/tasks", [
-                'title' => 'Tarefa',
+            ->post("/projects/{$project->id}/tasks", taskPayload([
                 'tags' => ' bug , , bug ,ui,',
-            ]);
+            ]));
 
         expect($project->tasks()->sole()->tags)->toBe(['bug', 'ui']);
     });
@@ -72,10 +76,9 @@ describe('store', function () {
         $project = Project::factory()->create();
 
         $this->actingAs($project->owner)
-            ->post("/projects/{$project->id}/tasks", [
-                'title' => 'Com anexo',
+            ->post("/projects/{$project->id}/tasks", taskPayload([
                 'attachments' => [UploadedFile::fake()->image('foto.png')],
-            ])
+            ]))
             ->assertRedirect();
 
         $attachment = $project->tasks()->sole()->attachments()->sole();
@@ -105,7 +108,7 @@ describe('store', function () {
         $project = Project::factory()->create();
 
         $this->actingAs(User::factory()->create())
-            ->post("/projects/{$project->id}/tasks", ['title' => 'Invasao'])
+            ->post("/projects/{$project->id}/tasks", taskPayload(['title' => 'Invasao']))
             ->assertNotFound();
 
         expect($project->tasks()->count())->toBe(0);
@@ -114,7 +117,7 @@ describe('store', function () {
     test('redirects a guest to the login screen', function () {
         $project = Project::factory()->create();
 
-        $this->post("/projects/{$project->id}/tasks", ['title' => 'Tarefa'])
+        $this->post("/projects/{$project->id}/tasks", taskPayload())
             ->assertRedirect(route('login'));
     });
 });
@@ -142,8 +145,9 @@ describe('update', function () {
             ->and($task->tags)->toBe(['depois']);
     });
 
-    test('clears the optional fields when they are submitted empty', function () {
+    test('rejects an update that empties a required field', function () {
         $task = Task::factory()->create();
+        $before = $task->only(['short_description', 'description']);
 
         $this->actingAs($task->project->owner)
             ->patch("/tasks/{$task->id}", [
@@ -152,14 +156,21 @@ describe('update', function () {
                 'description' => '',
                 'due_at' => '',
                 'tags' => '',
-            ]);
+            ])
+            ->assertInvalid(['short_description', 'description', 'due_at']);
 
-        $task->refresh();
+        expect($task->refresh()->only(['short_description', 'description']))
+            ->toBe($before);
+    });
 
-        expect($task->short_description)->toBeNull()
-            ->and($task->description)->toBeNull()
-            ->and($task->due_at)->toBeNull()
-            ->and($task->tags)->toBe([]);
+    test('still lets an update empty the tags', function () {
+        $task = Task::factory()->create();
+
+        $this->actingAs($task->project->owner)
+            ->patch("/tasks/{$task->id}", taskPayload(['tags' => '']))
+            ->assertValid();
+
+        expect($task->refresh()->tags)->toBe([]);
     });
 
     test('adds new attachments without removing the existing ones', function () {
@@ -168,12 +179,11 @@ describe('update', function () {
         $existing = TaskAttachment::factory()->for($task)->create();
 
         $this->actingAs($task->project->owner)
-            ->patch("/tasks/{$task->id}", [
-                'title' => $task->title,
+            ->patch("/tasks/{$task->id}", taskPayload([
                 'attachments' => [
                     UploadedFile::fake()->create('nota.pdf', 20, 'application/pdf'),
                 ],
-            ])
+            ]))
             ->assertRedirect();
 
         expect($task->attachments()->count())->toBe(2)
@@ -184,7 +194,7 @@ describe('update', function () {
         $task = Task::factory()->create();
 
         $this->actingAs($task->project->owner)
-            ->patch("/tasks/{$task->id}", ['title' => ''])
+            ->patch("/tasks/{$task->id}", taskPayload(['title' => '']))
             ->assertInvalid('title');
     });
 
@@ -192,7 +202,7 @@ describe('update', function () {
         $task = Task::factory()->create(['title' => 'Original']);
 
         $this->actingAs(User::factory()->create())
-            ->patch("/tasks/{$task->id}", ['title' => 'Invadida'])
+            ->patch("/tasks/{$task->id}", taskPayload(['title' => 'Invadida']))
             ->assertNotFound();
 
         expect($task->refresh()->title)->toBe('Original');

@@ -130,6 +130,42 @@ export function SunIcon({ className }: IconProps) {
     );
 }
 
+export function ListIcon({ className }: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={className}
+        >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    );
+}
+
+export function BoardIcon({ className }: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={className}
+        >
+            <rect x="3" y="4" width="5" height="16" rx="1" />
+            <rect x="10" y="4" width="5" height="11" rx="1" />
+            <rect x="17" y="4" width="4" height="7" rx="1" />
+        </svg>
+    );
+}
+
 export function MoonIcon({ className }: IconProps) {
     return (
         <svg
