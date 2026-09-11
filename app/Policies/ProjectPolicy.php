@@ -9,6 +9,14 @@ use Illuminate\Auth\Access\Response;
 class ProjectPolicy
 {
     /**
+     * Determine whether the user can open the project and read its tasks.
+     */
+    public function view(User $user, Project $project): Response
+    {
+        return $this->update($user, $project);
+    }
+
+    /**
      * Determine whether the user can update the project.
      *
      * Denied as "not found" so a failed attempt cannot be used to probe which

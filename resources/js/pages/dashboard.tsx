@@ -1,9 +1,20 @@
 import { Form, Head, usePage } from '@inertiajs/react';
 import ProjectSidebar from '@/components/project-sidebar';
+import TaskList from '@/components/task-list';
 import { logout } from '@/routes';
-import type { Project } from '@/types';
+import type { Project, StatusOption, Task } from '@/types';
 
-export default function Dashboard({ projects }: { projects: Project[] }) {
+export default function Dashboard({
+    projects,
+    selectedProject,
+    tasks,
+    statuses,
+}: {
+    projects: Project[];
+    selectedProject: Project | null;
+    tasks: Task[];
+    statuses: StatusOption[];
+}) {
     const { auth } = usePage().props;
 
     if (!auth.user) {
@@ -12,7 +23,9 @@ export default function Dashboard({ projects }: { projects: Project[] }) {
 
     return (
         <>
-            <Head title="Painel" />
+            <Head
+                title={selectedProject ? selectedProject.description : 'Painel'}
+            />
 
             <div className="flex min-h-screen flex-col bg-[#FDFDFC] text-[#1b1b18] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
                 <header className="flex items-center justify-between border-b border-[#e3e3e0] px-6 py-4 dark:border-[#3E3E3A]">
@@ -31,15 +44,29 @@ export default function Dashboard({ projects }: { projects: Project[] }) {
                 </header>
 
                 <div className="flex flex-1 flex-col lg:flex-row">
-                    <ProjectSidebar projects={projects} />
+                    <ProjectSidebar
+                        projects={projects}
+                        selectedProjectId={selectedProject?.id ?? null}
+                    />
 
-                    <main className="flex flex-1 flex-col gap-2 p-6 lg:p-8">
-                        <h1 className="text-[20px] font-medium">
-                            Olá, {auth.user.name}!
-                        </h1>
-                        <p className="text-[13px] text-[#706f6c] dark:text-[#A1A09A]">
-                            Você está autenticado como {auth.user.email}.
-                        </p>
+                    <main className="flex min-w-0 flex-1 flex-col gap-2 p-6 lg:p-8">
+                        {selectedProject ? (
+                            <TaskList
+                                project={selectedProject}
+                                tasks={tasks}
+                                statuses={statuses}
+                            />
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                <h1 className="text-[20px] font-medium">
+                                    Olá, {auth.user.name}!
+                                </h1>
+                                <p className="text-[13px] text-[#706f6c] dark:text-[#A1A09A]">
+                                    Selecione um projeto ao lado para ver e
+                                    gerenciar suas tarefas.
+                                </p>
+                            </div>
+                        )}
                     </main>
                 </div>
             </div>
