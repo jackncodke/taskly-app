@@ -3,6 +3,10 @@
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
+/* Drive `dark:` from the `dark` class on <html> instead of the
+   `prefers-color-scheme` default, so the theme toggle can override the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,

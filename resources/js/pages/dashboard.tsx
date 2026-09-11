@@ -1,6 +1,7 @@
 import { Form, Head, usePage } from '@inertiajs/react';
 import ProjectSidebar from '@/components/project-sidebar';
 import TaskList from '@/components/task-list';
+import ThemeToggle from '@/components/theme-toggle';
 import { logout } from '@/routes';
 import type { Project, StatusOption, Task } from '@/types';
 
@@ -33,14 +34,18 @@ export default function Dashboard({
                         Taskly
                     </span>
 
-                    <Form {...logout.form()}>
-                        <button
-                            type="submit"
-                            className="rounded-md border border-[#e3e3e0] px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-[#f4f4f2] dark:border-[#3E3E3A] dark:hover:bg-[#161615]"
-                        >
-                            Sair
-                        </button>
-                    </Form>
+                    <div className="flex items-center gap-2">
+                        <ThemeToggle />
+
+                        <Form {...logout.form()}>
+                            <button
+                                type="submit"
+                                className="rounded-md border border-[#e3e3e0] px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-[#f4f4f2] dark:border-[#3E3E3A] dark:hover:bg-[#161615]"
+                            >
+                                Sair
+                            </button>
+                        </Form>
+                    </div>
                 </header>
 
                 <div className="flex flex-1 flex-col lg:flex-row">

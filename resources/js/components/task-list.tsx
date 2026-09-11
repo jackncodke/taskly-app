@@ -177,7 +177,8 @@ export default function TaskList({
     // removing an attachment updates the open form straight away.
     const findTask = (id: number) => tasks.find((task) => task.id === id);
 
-    const editing = dialog.type === 'edit' ? findTask(dialog.taskId) : undefined;
+    const editing =
+        dialog.type === 'edit' ? findTask(dialog.taskId) : undefined;
     const deleting =
         dialog.type === 'delete' ? findTask(dialog.taskId) : undefined;
     const isEditing = editing !== undefined;
