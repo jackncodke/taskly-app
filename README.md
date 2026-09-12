@@ -243,6 +243,311 @@ curl -s -X POST http://localhost:8000/api/v1/projects/1/tasks \
 
 ---
 
+## Especificações técnicas
+
+Esta sessão descreve o sistema por dentro: como as camadas se encaixam, o que
+existe no banco, onde mora cada regra e por que certas decisões foram tomadas
+assim. Para instalar, configurar e publicar, veja "Para o desenvolvedor" e
+"Deploy", mais abaixo.
+
+### Arquitetura em camadas
+
+Há duas portas de entrada — a interface Inertia (cookie de sessão) e a API REST
+(token Sanctum) — e uma única implementação atrás delas. Form requests, policies
+e models são compartilhados; o que muda é a representação da resposta e o
+mecanismo de autenticação.
+
+```
+   Navegador (React 19 + Inertia)      Cliente HTTP (curl, script, app)
+        │ cookie de sessão                     │ Authorization: Bearer
+        ▼                                      ▼
+   routes/web.php                         routes/api.php  (prefixo v1)
+   DashboardController                    Api\V1\ProjectController
+   ProjectController                      Api\V1\TaskController
+   TaskController                         Api\V1\TaskOrderController
+   TaskAttachmentController               Api\V1\TaskPositionController
+   Auth\*Controller                       Api\V1\TaskAttachmentController
+        │                                 Api\V1\{User,TaskStatus}Controller
+        │ Inertia::render()               Api\V1\Auth\*Controller
+        │                                      │ JsonResource
+        └──────────────────┬───────────────────┘
+                           ▼
+     Form Requests   validação e normalização de entrada
+     Policies        ownership, sempre negando como 404
+     Models          Project, Task, TaskAttachment, User
+     Enum            App\TaskStatus (fonte única dos status)
+                           ▼
+     PostgreSQL                  storage/app/private (disco `local`)
+```
+
+Pontos que valem saber antes de abrir o código:
+
+- **Uma página, dois métodos.** `DashboardController::index()` e `::show()`
+  renderizam a mesma página Inertia `dashboard`; a diferença é só o prop
+  `selectedProject`. É o único controller que envia dados para o Inertia — os
+  outros respondem `back()`.
+- **Não há camada de serviço.** Não existem `app/Services`, `app/Jobs`,
+  `app/Observers`, `app/Notifications` nem `app/Console/Commands`. A regra de
+  negócio mora nos models (`Project::prependTask()`,
+  `Project::applyTaskOrder()`, `Task::attachUploadedFile()`) e nas form
+  requests. Um controller é sempre autorizar → validar → delegar → responder.
+- **`bootstrap/app.php`** registra o health check `/up`, anexa
+  `HandleInertiaRequests` e `AddLinkHeadersForPreloadedAssets` ao grupo web,
+  chama `throttleApi()` e força resposta JSON quando a rota casa `api/*` ou o
+  cliente pede JSON.
+- **`app/Providers/AppServiceProvider.php`** concentra as decisões globais:
+  `Date::use(CarbonImmutable::class)`, proibição de comandos destrutivos de
+  banco em produção, `Password::defaults()` estrito em produção e o limitador
+  `api` (60/min) chaveado por `Auth::guard('sanctum')->id() ?? $request->ip()` —
+  o guard é nomeado explicitamente porque o throttle roda **antes** do
+  middleware `auth:sanctum`, quando `Auth::id()` ainda seria nulo.
+
+### Modelo de dados
+
+**`projects`**
+
+| Coluna | Tipo | Observação |
+| --- | --- | --- |
+| `id` | bigint PK | |
+| `user_id` | bigint FK → `users` | `cascadeOnDelete` |
+| `description` | string(255) | único campo do projeto |
+| `created_at` / `updated_at` | timestamp | |
+
+**`tasks`**
+
+| Coluna | Tipo | Observação |
+| --- | --- | --- |
+| `id` | bigint PK | |
+| `project_id` | bigint FK → `projects` | `cascadeOnDelete` |
+| `position` | integer, default `0` | ordem manual dentro do projeto |
+| `title` | string(255) | |
+| `short_description` | string(255) nullable | obrigatória na validação |
+| `description` | text nullable | obrigatória na validação |
+| `status` | string, default `not_started` | valor de `App\TaskStatus` |
+| `due_at` | timestamp nullable | obrigatório na validação |
+| `tags` | json, default `'[]'` | lista de strings |
+| `created_at` / `updated_at` | timestamp | |
+
+Índices: `[project_id, created_at]` e `[project_id, position]` — os dois modos
+como a lista é lida.
+
+**`task_attachments`**
+
+| Coluna | Tipo | Observação |
+| --- | --- | --- |
+| `id` | bigint PK | |
+| `task_id` | bigint FK → `tasks` | `cascadeOnDelete` |
+| `disk` | string | gravado por linha, não lido do config |
+| `path` | string | nome hasheado gerado pelo Laravel |
+| `original_name` | string | só dado de exibição; nunca vira caminho |
+| `mime_type` | string | detectado a partir do conteúdo do arquivo |
+| `size` | unsigned bigint | bytes |
+| `created_at` / `updated_at` | timestamp | |
+
+**`personal_access_tokens`** — tabela padrão do Sanctum (`tokenable` morph,
+`token` com o hash e índice único, `abilities`, `last_used_at`, `expires_at`).
+
+As demais tabelas vêm das migrations iniciais do framework e não são tocadas
+pelo domínio: `users` (com `email` unique), `password_reset_tokens`, `sessions`,
+`cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`.
+
+#### Decisões do schema
+
+- **`tags` é JSON, não tabela pivô.** Nada no sistema consulta ou agrega por
+  tag; uma tabela de junção custaria duas escritas por salvamento e não
+  compraria nada hoje.
+- **`status` é `string`, não enum de banco.** A autoridade é o enum PHP; incluir
+  um status novo é mudança de código, não migration que reescreve o tipo da
+  coluna.
+- **`disk` é gravado por linha.** Uma migração futura para S3 não quebra os
+  arquivos já enviados: cada anexo sabe de onde sair.
+- **A cascata acontece pelos models, não só pela FK.** `Project`, `Task` e
+  `TaskAttachment` apagam os filhos pelo `booted()`, porque uma cascata só de
+  banco deixaria os arquivos órfãos no disco. O arquivo é removido no evento
+  `deleted` (depois da linha), de modo que uma falha deixa bytes órfãos em vez
+  de um download quebrado.
+- **`User::email()` é um Attribute mutator** que aplica `trim` e minúsculas na
+  escrita — é o que faz o índice unique enxergar `Ana@Exemplo.com` e
+  `ana@exemplo.com` como o mesmo e-mail.
+- **A migration de `position` faz backfill** (`seedPositionsFromCreationOrder`)
+  em PHP, e não com window function, para não depender do motor de banco.
+- Os models usam os atributos do Laravel 13 (`#[Fillable]`, `#[Hidden]`) em vez
+  das propriedades `$fillable` e `$hidden`.
+
+### Backend
+
+| Camada | Onde | Papel |
+| --- | --- | --- |
+| Controllers web | `app/Http/Controllers` | Respondem à interface Inertia |
+| Controllers da API | `app/Http/Controllers/Api/V1` | Respondem JSON |
+| Form Requests | `app/Http/Requests` | Validação, normalização e parte da autorização |
+| Resources | `app/Http/Resources` | Representação JSON da API |
+| Policies | `app/Policies` | Ownership (`view`, `update`, `delete`) |
+| Enum | `app/TaskStatus.php` | Status, rótulos e ordem das colunas |
+| Providers | `app/Providers/AppServiceProvider.php` | Decisões globais e rate limit |
+
+Detalhes que não são óbvios pelos nomes:
+
+- **`TaskController::updateStatus()` é separado de `update()`.** O dropdown do
+  cartão manda um campo só; se reaproveitasse o `update`, teria de reenviar
+  título e descrições obrigatórios a cada troca de status.
+- **`TaskController::move()` e `Api\V1\TaskPositionController`** gravam status e
+  ordem dentro de uma única `DB::transaction()`. Sem isso, um cartão poderia
+  acabar na coluna certa e na posição errada.
+- **`ReorderTasksRequest` exige uma permutação exata** dos ids do projeto
+  (regra em `after()`); lista parcial ou com ids estranhos é recusada, porque
+  reordenar parcialmente embaralharia em silêncio o que ficou de fora. A
+  autorização está no `authorize()` e não no controller de propósito: a regra lê
+  os ids do projeto, e checar depois deixaria um estranho distinguir projeto
+  vazio de projeto cheio pela mensagem de erro. `MoveTaskRequest` estende essa
+  request e acrescenta `status`.
+- **`Api\V1\UpdateTaskRequest` estende a request web** e troca as regras para
+  `sometimes|required`, permitindo `PATCH` parcial e incluindo `status`. Já
+  **`Api\V1\Auth\LoginRequest` deliberadamente não estende a web** (uma é
+  stateless e emite token, a outra abre sessão), mas usa a **mesma chave de
+  throttle** — as duas portas dividem o mesmo balde de tentativas.
+- **As três policies negam com `Response::denyAsNotFound()`**, então acesso
+  indevido vira 404 e não 403. Não há registro em `AuthServiceProvider`: vale a
+  descoberta por convenção de nomes do Laravel.
+- **Resources**: datas em ISO-8601 (a interface web recebe `due_at_label` já
+  formatado em pt-BR pelo servidor), `status` serializado como
+  `{value, label}`, e `TaskAttachmentResource` omite `disk` e `path` de
+  propósito — o cliente recebe só a `url` da rota de download.
+
+### Frontend
+
+`resources/js/app.tsx` é mínimo (`createInertiaApp` com título e barra de
+progresso). A resolução de páginas é feita pelo plugin `@inertiajs/vite`, com um
+entry por página declarado em `resources/views/app.blade.php`.
+
+```
+resources/js/
+├── actions/     gerado pelo Wayfinder (fora do Git)
+├── routes/      gerado pelo Wayfinder (fora do Git)
+├── wayfinder/   gerado pelo Wayfinder (fora do Git)
+├── pages/       dashboard.tsx, auth/login.tsx, auth/register.tsx
+├── layouts/     auth-layout.tsx (cartão centralizado das telas de acesso)
+├── components/  task-list, task-board, task-card, project-sidebar,
+│                tag-chip, modal, buttons, icons, text-field,
+│                textarea-field, input-error, theme-toggle, view-toggle
+├── lib/         theme.ts, task-view.ts, storage.ts, utils.ts,
+│                native-validation.ts
+└── types/       task.ts, project.ts, auth.ts, index.ts, global.d.ts
+```
+
+Não existe `resources/js/hooks/`: os hooks moram em `lib/`. `theme.ts` expõe
+`useTheme` sobre `useSyncExternalStore`, ouvindo `storage`, `matchMedia` e
+listeners locais; `task-view.ts` guarda a escolha entre lista e quadro;
+`storage.ts` embrulha o `localStorage` em `try/catch`, porque em janela anônima
+o acesso pode lançar.
+
+Componentes centrais:
+
+- **`task-list.tsx`** — o maior arquivo do front. Mantém `items` em estado local
+  para o arrastar ficar otimista, faz reordenação por mouse e por teclado (setas
+  na alça), troca de status otimista e
+  `moveToStatus(task, status, beforeId)`, que encaixa a tarefa na ordem global.
+  Os modais de criar e editar usam `<Form>` do Inertia com as ações tipadas do
+  Wayfinder (`store.form(project.id)`, `update.form(task.id)`).
+- **`task-board.tsx`** — o quadro. Uma `<section>` por opção do enum, arrastar e
+  soltar nativo (HTML5) entre e dentro das colunas, marcador de destino,
+  contagem por coluna e placeholder de coluna vazia. Não guarda cópia da ordem:
+  reporta o destino como `(task, status, beforeId)` e deixa a lista decidir.
+- **`task-card.tsx`** — o corpo do cartão, compartilhado pelas duas visões, e
+  `styleFor(status)`, fonte única dos tons (`card`, `select`, `column`). Status
+  desconhecido cai no neutro, então acrescentar um case ao enum já renderiza
+  antes de existir cor definida para ele.
+- **`tag-chip.tsx`** — as classes são escritas por extenso porque o scanner do
+  Tailwind precisa vê-las literais no código; a paleta é restrita a tons frios,
+  reservando os quentes para estado.
+
+O Tailwind v4 é configurado em CSS (`resources/css/app.css`):
+`@import 'tailwindcss'`, `@source` para as views, `@theme` para a fonte e
+`@custom-variant dark (&:where(.dark, .dark *))` — é essa linha que faz o
+`dark:` seguir a classe no `<html>`, e portanto o botão de tema vencer a
+preferência do sistema. O React Compiler está ligado
+(`babel-plugin-react-compiler` no `vite.config.ts`), e a saída do Wayfinder fica
+fora do lint e do formatador.
+
+### Regras de negócio implementadas
+
+**Prazo.** `due_at` é obrigatório e precisa ser `after_or_equal` a
+`StoreTaskRequest::earliestDeadline()`, que é `now()->startOfMinute()`. O
+arredondamento existe porque o input `datetime-local` não tem segundos:
+comparar com o segundo atual recusaria justamente o minuto que o seletor
+oferece. Na edição, `UpdateTaskRequest::keepsStoredDeadline()` compara o valor
+enviado com o gravado e, se forem iguais, remove a regra — uma tarefa atrasada
+continua editável, mas o prazo não pode ser apagado nem trocado por outra data
+passada. O instante de referência também vai para o front no prop `now`, para
+que seletor e validador nunca discordem.
+
+**Ordenação.** Existe **uma única** `position` por projeto, não uma ordem por
+coluna. As consultas são sempre `orderBy('position')->orderByDesc('id')`. Tarefa
+nova é inserida no topo por `Project::prependTask()`, que incrementa todas as
+outras e grava a nova em `position` 0 dentro de uma transação. Reordenar envia a
+lista **completa** de ids, conforme a regra de permutação descrita acima.
+
+**Quadro.** Soltar um cartão é troca de status **mais** reordenação, gravadas
+juntas. As rotas de mover usam `scopeBindings()`, então uma tarefa de outro
+projeto dá 404 já na resolução da rota, antes de qualquer regra. O quadro é a
+mesma lista da visão em lista, filtrada por status — as duas visões não têm como
+divergir.
+
+**Anexos.** Até 10 arquivos por envio, 10 MB cada, extensões
+`jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,txt,csv,zip`. Vão para o disco
+privado `local` com nome hasheado; `original_name` é apenas dado. O download
+passa por rota autenticada que roda a policy a cada leitura e responde com
+`X-Content-Type-Options: nosniff`, `inline` para imagens e `attachment` para os
+demais tipos.
+
+**Tags.** O campo é um texto com vírgulas; `prepareForValidation()` divide,
+apara espaços, descarta vazios e duplicados. Máximo de 10 tags de 30 caracteres.
+
+**Privacidade.** Recurso de outro usuário responde 404, nunca 403. O dono vem
+sempre da relação do usuário autenticado (`$request->user()->projects()`), nunca
+do payload — há teste para isso. Login e cadastro devolvem a mesma mensagem para
+e-mail inexistente e senha errada, e o login é limitado a 5 tentativas chaveadas
+por `lower(email)|ip` (chavear só pelo e-mail permitiria trancar a conta alheia
+de fora).
+
+### Autenticação
+
+Não há Breeze, Fortify nem Jetstream: o ponto de partida foi o esqueleto
+`laravel/blank-react-starter-kit`, e os controllers e requests de autenticação
+são próprios (`App\Http\Controllers\Auth\*`, `App\Http\Requests\Auth\*`).
+
+- **Web** — guard de sessão `web`, sessão em banco (`SESSION_DRIVER=database`),
+  120 minutos, `http_only`, `same_site=lax`, sessão regenerada no login,
+  "lembrar de mim" suportado.
+- **API** — Sanctum com personal access tokens, `expiration => null` (não
+  expiram por tempo). O token é nomeado pelo `device_name` enviado, ou `api`. O
+  logout apaga apenas `currentAccessToken()`.
+- **Não implementado**: 2FA, verificação de e-mail (o `User` não implementa
+  `MustVerifyEmail`) e **recuperação de senha** — a tabela
+  `password_reset_tokens` e as traduções em `lang/pt_BR/passwords.php` existem,
+  mas nenhuma rota aponta para elas.
+
+### Testes
+
+`tests/Pest.php` liga `TestCase` e `RefreshDatabase` à suíte `Feature` e define
+o helper global `taskPayload()`, usado por quase todo teste de tarefa. Toda a
+cobertura real está em `tests/Feature` (21 arquivos); `tests/Unit` tem apenas o
+exemplo do esqueleto.
+
+| Arquivo | O que garante |
+| --- | --- |
+| `TaskDeadlineTest` | Prazo no passado é recusado, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo |
+| `TaskReorderTest` | A ordem é gravada, sobrevive a uma edição posterior, tarefa nova vai para o topo e listas que não são permutação são recusadas |
+| `TaskMoveTest` | Status e ordem mudam juntos ou não mudam, e tarefa de outro projeto dá 404 |
+| `TaskStatusTest` | Tarefa nasce `not_started`, percorre os quatro status e recusa status desconhecido |
+| `LocalizationTest` | Nenhuma mensagem do framework ficou em inglês |
+| `Models/UserTest` | E-mail é canonizado e o índice unique pega variações de caixa |
+| `Policies/ProjectPolicyTest` | A negação chega como 404 |
+| `Api/V1/RateLimitTest` | 60/min por usuário do token, com fallback por IP e 429 ao estourar |
+| `Api/V1/Auth/AuthenticatedSessionControllerTest` | Emissão de token, e-mail sem distinção de caixa, mensagem única de erro, bloqueio após cinco tentativas e revogação só do token em uso |
+
+---
+
 ## Para o desenvolvedor
 
 ### Stack
@@ -484,3 +789,142 @@ continuam valendo como comandos de build do pipeline.
 - **Regras de senha ficam mais rígidas** no cadastro: mínimo de 12 caracteres,
   maiúsculas e minúsculas, números, símbolos e verificação contra vazamentos
   conhecidos (`uncompromised()`). Em desenvolvimento vale o padrão do Laravel.
+
+---
+
+## Prompts utilizados no desenvolvimento
+
+O Taskly foi construído inteiramente por conversa, em sessões do Claude Code:
+cada funcionalidade descrita acima nasceu de um pedido em português, e o código
+correspondente foi escrito, testado e commitado a partir dele.
+
+Os prompts abaixo são **transcrições literais** — inclusive com os erros de
+digitação originais — e estão agrupados por etapa do desenvolvimento; dentro de
+cada etapa aparecem na ordem em que foram dados. Ficaram de fora os pedidos
+puramente operacionais (`commit e push`, `/compact`, ajustes de repositório
+Git), que não definiram comportamento do sistema.
+
+### 1. Autenticação e cadastro
+
+> Crie uma tela de login de usuário utilizando os campos e-mail e senha, com
+> opção de cadastro, sessão permanente sem OAuth obrigatório.
+
+> remova a pagina de boas vidas (Welcome) e torne a pagina de login como a
+> inicial
+
+> no cadastro do usuário validar se não existe o mesmo email já cadastrado
+
+> todos os e-mail sempre devem ser gravados em letra minuscula como padrão
+
+*Deste último saiu o mutator `User::email()` e o teste que garante que o índice
+unique enxerga variações de caixa como o mesmo e-mail.*
+
+### 2. Projetos
+
+> Após o login do usuário no Dashboard, exibir uma div lateral na esquerda, onde
+> será exibida uma lista dos projetos do usuário, e na parte superior da div um
+> botão para adicionar um novo projeto, o texto do botão será um icone + e o
+> texto Projeto. Ao clicar no botão para adicionar um novo projeto será exibido
+> um formulário dentro de uma modal com os campo da descrição do projeto e os
+> botões Salvar e Cancelar.
+
+> na listagem de projetos, no final do nome do projeto coloque um icone de lapis
+> para editar e um icone de uma lixeira para excluir
+
+> Cada projeto é vinculado ao usuário logado, o usuário somente poderá ver os
+> projetos criados por ele.
+
+*A última frase virou as policies e a decisão de negar como 404 em vez de 403.*
+
+### 3. Tarefas
+
+> Na div ao lado da div de listagem de projetos criar uma lista de Tarefas.
+> Tarefas por projeto com os seguintes campos: título, descrição curta,
+> descrição completa, prazo (data e hora), tags, anexos e/ou fotos.
+> Todos os campos devem ser editáveis após a criação.
+> Acima da listagem de Tarefas criar um botão para Adicionar tarefa visualmente
+> igual a de Adicionar Projeto, trocando a descrição de Projeto para Tarefa.
+> Esta listagem somente será exibida ao selecionar um projeto na listagem de
+> projetos.
+
+> Na listagem de tarefas adicione em cada tarefa listada o icone padrão para
+> poder mudar permanentemente a ordem da tarefa utilizando o recurso drag and
+> drop
+
+*"permanentemente" é o motivo da coluna `position` e da migration de backfill.*
+
+> no formulario o titulo, descrição curta, descrição completa e prazo são
+> obrigatorios
+
+> nao permita que o prazo da tarefa seja anterior que a data e hora atuais
+
+*Daqui saíram `earliestDeadline()` e, na sequência, a exceção que mantém uma
+tarefa atrasada editável sem obrigar a escolher outro prazo.*
+
+### 4. Status e quadro kanban
+
+> Adicionar Status das tarefas: Não iniciada, Em andamento, Concluída, Cancelada
+> Atualizável pelo usuário a qualquer momento
+> Esta funcionalidade é um dropdown no canto inferior direito de cada tarefa
+> listada.
+
+> aplique as seleção de cores do status na tarefa inteira
+
+> na barra de titulo da aplicação do lado esquerdo do botão de alteração do tema
+> coloque um botão para alternar a visualiação das tarefas utilizando icones
+> para modo lista e modo kanban, este botão deve ser 20% maior que o botão do
+> tema.
+> desenvolva a funcionalidade de exbir as tarefas em modo kanban possibilitando
+> utilizar o recurso arrastar e soltar
+
+> mude as cores dos quadros do kanban de acordo com o status da tarefa
+
+*O conjunto produziu o enum `App\TaskStatus`, o `styleFor()` como fonte única
+dos tons e a gravação de status e posição em uma só transação.*
+
+### 5. Tema e visual
+
+> Na barra de titulo da aplicação, coloque do lado esquerdo do botão sair um
+> botão para alternar o modo de exibição do tema claro e escuro utilizando
+> somente icones padrão para esta funcionalidade
+
+> agora faca a coloração das tags com cores aleatórias, mas elas tem que ser
+> legiveis e combinar com o visual
+
+> use somente cores frias para as tags, evite cores quentes
+
+*A restrição a tons frios é o que deixa os tons quentes livres para sinalizar
+estado.*
+
+### 6. Localização
+
+> coloque todas as mensagens de alerta ao usuário em portugues
+
+> no frontend o formulário de cadastro ainda apresenta as mensagens em ingles
+> quando eu clico em salvar, corrigir para exibir as mensagens ao usuário em
+> portugues-brasil
+
+*O segundo pedido gerou o `LocalizationTest`, que hoje falha se qualquer
+mensagem do framework voltar a aparecer em inglês.*
+
+### 7. API, documentação e ajustes
+
+> refatore o codigo na arquitetura API REST
+
+> execute a seguinte tarefa utilizando um subagente:
+> crie um arquivo README com a descrição sumária do projeto, descrever das
+> principais funcionalidades do sistema, como utilizar o sistema, e criar uma
+> sessão para o desenvolvedor explicando como instalar o sistema localmente para
+> manutenção e como realizar o deploy do projeto.
+
+### Dos prompts aos commits
+
+| Commit | Etapas correspondentes |
+| --- | --- |
+| `27581f4` Initial commit: Taskly with authentication and project management | 1 e 2 |
+| `d121287` Add task management with attachments, statuses and ordering | 3, 4 e 5 (status e tags) |
+| `401a619` Add light/dark theme toggle to the app header | 5 (tema) |
+| `c29b7a7` Add kanban board, deadline rules and Portuguese messages | 3 (prazo), 4 (quadro) e 6 |
+| `2ecff9b` Tint board columns to match their status | 4 (cores das colunas) |
+| `51c4d9f` Add a REST API layer under /api/v1 | 7 |
+| `77b46c7` Add project README | 7 |
