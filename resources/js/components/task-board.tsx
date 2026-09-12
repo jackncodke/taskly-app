@@ -105,7 +105,9 @@ export default function TaskBoard({
                         }}
                         className={cn(
                             'flex w-[17rem] shrink-0 flex-col gap-3 rounded-lg border p-3 transition-colors',
-                            'border-[#e3e3e0] bg-[#f7f7f5] dark:border-[#3E3E3A] dark:bg-[#141413]',
+                            styleFor(status.value).column,
+                            // Last, so the drop outline still wins over
+                            // whatever colour the status painted.
                             overColumn === status.value &&
                                 'border-[#1b1b18] dark:border-[#EDEDEC]',
                         )}
@@ -115,7 +117,9 @@ export default function TaskBoard({
                                 {status.label}
                             </h2>
 
-                            <span className="shrink-0 rounded-full bg-[#e9e9e6] px-2 py-0.5 text-[12px] text-[#706f6c] dark:bg-[#2a2a28] dark:text-[#A1A09A]">
+                            {/* Translucent rather than a fixed grey, so it
+                                sits on any of the status tints. */}
+                            <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[12px] text-[#706f6c] dark:bg-white/10 dark:text-[#A1A09A]">
                                 {column.length}
                             </span>
                         </header>
@@ -218,7 +222,7 @@ export default function TaskBoard({
                             ))}
 
                             {column.length === 0 ? (
-                                <li className="rounded-md border border-dashed border-[#e3e3e0] p-4 text-center text-[12px] text-[#706f6c] dark:border-[#3E3E3A] dark:text-[#A1A09A]">
+                                <li className="rounded-md border border-dashed border-black/15 p-4 text-center text-[12px] text-[#706f6c] dark:border-white/15 dark:text-[#A1A09A]">
                                     Arraste uma tarefa para cá.
                                 </li>
                             ) : null}

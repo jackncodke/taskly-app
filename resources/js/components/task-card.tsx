@@ -73,31 +73,41 @@ export function AttachmentChip({
 }
 
 /**
- * Purely cosmetic tint per status, applied to the whole card and to its
- * dropdown. Kept in one place so the two never disagree about a colour.
+ * Purely cosmetic tint per status, applied to the whole card, to its dropdown
+ * and to the board column that collects them. Kept in one place so the three
+ * never disagree about a colour.
  *
  * The tints are pale on purpose: the card still has to read as a task rather
  * than as a warning, and the text on top of it keeps its normal contrast.
+ *
+ * `column` is one step deeper than `card` in light mode and one step lighter in
+ * dark mode, which in both cases leaves the cards sitting *on* the column
+ * rather than dissolving into it — the same relationship the neutral pair had
+ * before any status had a colour.
  */
-type StatusStyle = { card: string; select: string };
+type StatusStyle = { card: string; select: string; column: string };
 
 const neutralStatusStyle: StatusStyle = {
     card: 'border-[#e3e3e0] dark:border-[#3E3E3A]',
     select: 'border-[#e3e3e0] text-[#706f6c] dark:border-[#3E3E3A] dark:text-[#A1A09A]',
+    column: 'border-[#e3e3e0] bg-[#f7f7f5] dark:border-[#3E3E3A] dark:bg-[#141413]',
 };
 
 const statusStyles: Record<string, StatusStyle> = {
     in_progress: {
         card: 'border-blue-300 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40',
         select: 'border-blue-300 text-blue-800 dark:border-blue-800 dark:text-blue-300',
+        column: 'border-blue-300 bg-blue-100/70 dark:border-blue-900 dark:bg-blue-950/25',
     },
     completed: {
         card: 'border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/40',
         select: 'border-green-300 text-green-800 dark:border-green-800 dark:text-green-300',
+        column: 'border-green-300 bg-green-100/70 dark:border-green-900 dark:bg-green-950/25',
     },
     cancelled: {
         card: 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40',
         select: 'border-red-300 text-red-800 dark:border-red-800 dark:text-red-300',
+        column: 'border-red-300 bg-red-100/70 dark:border-red-900 dark:bg-red-950/25',
     },
 };
 
