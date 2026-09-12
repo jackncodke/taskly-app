@@ -53,7 +53,7 @@ class UpdateTaskRequest extends FormRequest
      * a new deadline. The rule is about *setting* a deadline in the past, so
      * keeping the stored one is always allowed.
      */
-    private function keepsStoredDeadline(): bool
+    protected function keepsStoredDeadline(): bool
     {
         $task = $this->route('task');
 

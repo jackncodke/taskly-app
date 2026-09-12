@@ -10,7 +10,6 @@ use App\Http\Requests\UpdateTaskStatusRequest;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -26,20 +25,10 @@ class TaskController extends Controller
         Gate::authorize('update', $project);
 
         // Created through the relationship so the owning project comes from the
-        // authorized route binding, never from the request payload. A new task
-        // goes to the top, which is where the list already put the newest one
-        // before the order became something people set by hand.
-        $task = DB::transaction(function () use ($project, $request): Task {
-            $project->tasks()->increment('position');
+        // authorized route binding, never from the request payload.
+        $task = $project->prependTask($request->safe()->except('attachments'));
 
-            $task = $project->tasks()->make($request->safe()->except('attachments'));
-            $task->position = 0;
-            $task->save();
-
-            return $task;
-        });
-
-        $this->attachFiles($task, $request->file('attachments') ?? []);
+        $task->attachUploadedFiles($request->file('attachments') ?? []);
 
         return back();
     }
@@ -57,7 +46,7 @@ class TaskController extends Controller
 
         $task->update($request->safe()->except('attachments'));
 
-        $this->attachFiles($task, $request->file('attachments') ?? []);
+        $task->attachUploadedFiles($request->file('attachments') ?? []);
 
         return back();
     }
@@ -91,7 +80,7 @@ class TaskController extends Controller
         // Authorized in ReorderTasksRequest, which has to run before the rule
         // that reads this project's task ids.
         DB::transaction(function () use ($project, $request): void {
-            $this->applyOrder($project, $request->validated('tasks'));
+            $project->applyTaskOrder($request->validated('tasks'));
         });
 
         return back();
@@ -115,24 +104,10 @@ class TaskController extends Controller
         DB::transaction(function () use ($project, $request, $task): void {
             $task->update(['status' => $request->validated('status')]);
 
-            $this->applyOrder($project, $request->validated('tasks'));
+            $project->applyTaskOrder($request->validated('tasks'));
         });
 
         return back();
-    }
-
-    /**
-     * Write the given ids as the project's task order.
-     *
-     * @param  array<int, int>  $ids
-     */
-    private function applyOrder(Project $project, array $ids): void
-    {
-        foreach ($ids as $position => $id) {
-            // Scoped to the relationship, so an id from another project
-            // matches nothing instead of being moved.
-            $project->tasks()->whereKey($id)->update(['position' => $position]);
-        }
     }
 
     /**
@@ -145,29 +120,5 @@ class TaskController extends Controller
         $task->delete();
 
         return back();
-    }
-
-    /**
-     * Move uploaded files onto the private disk and record them.
-     *
-     * `store()` names the file from a hash rather than from what the visitor
-     * called it, so a crafted filename cannot escape the directory. The
-     * original name is kept as data, for display and for the download header.
-     *
-     * @param  array<int, UploadedFile>  $files
-     */
-    private function attachFiles(Task $task, array $files): void
-    {
-        foreach ($files as $file) {
-            $task->attachments()->create([
-                'disk' => 'local',
-                'path' => $file->store("task-attachments/{$task->id}", 'local'),
-                'original_name' => $file->getClientOriginalName(),
-                // Guessed from the file's contents, not from the header the
-                // client sent, which it can set to anything.
-                'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
-                'size' => $file->getSize(),
-            ]);
-        }
     }
 }

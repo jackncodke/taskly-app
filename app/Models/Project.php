@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -44,6 +45,44 @@ class Project extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    /**
+     * Create a task at the top of the project's list.
+     *
+     * A new task goes first, which is where the list already put the newest
+     * one before the order became something people set by hand. Shifting the
+     * others and inserting happen in one transaction so a failure cannot leave
+     * two tasks claiming position 0.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function prependTask(array $attributes): Task
+    {
+        return DB::transaction(function () use ($attributes): Task {
+            $this->tasks()->increment('position');
+
+            $task = $this->tasks()->make($attributes);
+            $task->position = 0;
+            $task->save();
+
+            return $task;
+        });
+    }
+
+    /**
+     * Write the given ids as the project's task order.
+     *
+     * Each update is scoped to the relationship, so an id from another project
+     * matches nothing instead of being moved.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function applyTaskOrder(array $ids): void
+    {
+        foreach ($ids as $position => $id) {
+            $this->tasks()->whereKey($id)->update(['position' => $position]);
+        }
     }
 
     /**
