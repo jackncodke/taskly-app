@@ -25,9 +25,15 @@
             })();
         </script>
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        {{-- No SVG here on purpose: the mark is drawn artwork rather than a
+             vector, so an SVG could only wrap the same pixels — and a browser
+             that finds one prefers it, which would replace the 16px drawn for
+             a tab with a downscale of a much larger image. --}}
+        <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+        <link rel="icon" href="/favicon-96x96.png" type="image/png" sizes="96x96">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+        <link rel="manifest" href="/site.webmanifest">
+        <meta name="theme-color" content="#33a1f7">
 
         @fonts
 

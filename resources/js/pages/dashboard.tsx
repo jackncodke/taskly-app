@@ -1,10 +1,12 @@
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import AlertsPanel from '@/components/alerts-panel';
+import Brand from '@/components/brand';
 import { headerButtonClasses } from '@/components/buttons';
 import { HomeIcon } from '@/components/icons';
 import OverviewPanel from '@/components/overview-panel';
 import ProgressPanel from '@/components/progress-panel';
 import ProjectSidebar from '@/components/project-sidebar';
+import SiteFooter from '@/components/site-footer';
 import TaskList from '@/components/task-list';
 import TimelinePanel from '@/components/timeline-panel';
 import ThemeToggle from '@/components/theme-toggle';
@@ -58,9 +60,7 @@ export default function Dashboard({
 
             <div className="flex min-h-screen flex-col bg-[#FDFDFC] text-[#1b1b18] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
                 <header className="flex items-center justify-between border-b border-[#e3e3e0] px-6 py-4 dark:border-[#3E3E3A]">
-                    <span className="text-[18px] font-medium tracking-tight">
-                        Taskly
-                    </span>
+                    <Brand />
 
                     <div className="flex items-center gap-2">
                         {selectedProject ? (
@@ -159,6 +159,8 @@ export default function Dashboard({
                         )}
                     </main>
                 </div>
+
+                <SiteFooter />
             </div>
         </>
     );
