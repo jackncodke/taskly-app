@@ -83,13 +83,72 @@ csv, zip`.
 - Não há disco público envolvido, portanto `php artisan storage:link` **não** é
   necessário.
 
+### Painel inicial
+
+Sem nenhum projeto selecionado, a área principal mostra quatro blocos montados
+pelo `DashboardController` a partir dos projetos do próprio usuário:
+
+- **Progresso** — nível, experiência, sequência de dias e o catálogo de
+  conquistas (detalhado na seção seguinte).
+- **Visão Geral** — uma linha por projeto e uma coluna por status, mais o total.
+  As colunas saem do enum `App\TaskStatus`, nas mesmas cores dos cartões, então
+  um status novo aparece aqui sem mexer no front. O nome do projeto é um link
+  que o abre.
+- **Alertas** — tarefas com prazo vencido que ninguém fechou, da mais atrasada
+  para a menos. Concluída e cancelada não entram, por mais tarde que tenham
+  terminado: já estão resolvidas. Clicar em uma abre o mesmo formulário de
+  edição da lista de tarefas.
+- **Timeline** — os prazos dos próximos 7 dias sobre um eixo de dias, com um
+  ponto por tarefa na cor do seu status. As posições são calculadas no servidor,
+  no mesmo fuso em que os prazos são gravados e validados.
+
+Os quatro só existem no painel sem projeto aberto; com um projeto selecionado a
+área principal é a lista (ou o quadro) de tarefas dele.
+
+### Progresso, sequências e conquistas
+
+- **Experiência.** Cada tarefa concluída vale 10 XP, e concluir antes do prazo
+  rende mais 5. Tarefa sem prazo não é adiantada nem atrasada, e por isso não
+  recebe o bônus.
+- **Níveis.** O nível `n` começa em `25 × n × (n − 1)` XP — nível 2 em 50, nível
+  3 em 150, nível 5 em 500 —, de modo que os primeiros chegam rápido e os
+  últimos continuam valendo alguma coisa. A barra mostra quanto falta para o
+  próximo.
+- **Sequência.** Dias seguidos em que alguma tarefa foi concluída; várias
+  conclusões no mesmo dia contam uma vez só. Uma sequência que termina ontem
+  continua de pé, porque o dia ainda não acabou. O recorde fica ao lado da
+  sequência atual.
+- **Conquistas.** Oito medalhas, e o painel mostra sempre as oito: a que ainda
+  não foi conquistada fica em contorno tracejado, e a condição aparece na dica
+  ao passar o mouse — uma medalha cuja regra ninguém lê não serve de meta. A
+  ganha nas últimas 24 horas aparece destacada em cor.
+
+| Medalha         | Condição                              |
+| --------------- | ------------------------------------- |
+| Primeiro passo  | Concluir a primeira tarefa            |
+| Ritmo constante | Concluir 10 tarefas                   |
+| Meio caminho    | Concluir 50 tarefas                   |
+| Centurião       | Concluir 100 tarefas                  |
+| Semana de foco  | Concluir algo em 7 dias seguidos      |
+| Mês de foco     | Concluir algo em 30 dias seguidos     |
+| Sempre no prazo | Concluir 10 tarefas antes do prazo    |
+| Faxina geral    | Zerar um projeto de 3 tarefas ou mais |
+
+XP, nível e sequências são recontados a partir das tarefas a cada carregamento;
+nada disso fica gravado, então não há como divergirem do que está no banco. A
+medalha é a exceção: ela registra um fato datado, fica gravada em
+`user_achievements` e continua sendo sua mesmo que o projeto que a rendeu seja
+excluído.
+
 ### Interface
 
 - Tema claro/escuro com botão no cabeçalho, respeitando a preferência do sistema
   quando o usuário não escolheu nada. A escolha é aplicada antes do primeiro
   paint (script inline no layout), então não há "flash" do tema errado.
 - Barra lateral com a lista de projetos; área principal com as tarefas do
-  projeto selecionado.
+  projeto selecionado, ou com os painéis quando nenhum está aberto.
+- Com um projeto aberto, o ícone de casa no cabeçalho fecha o projeto e volta ao
+  painel inicial.
 - Mensagens de validação, rótulos e textos em português do Brasil
   (`APP_LOCALE=pt_BR`, traduções em `lang/pt_BR`).
 
@@ -129,9 +188,13 @@ csv, zip`.
    download (ou abre a imagem em nova aba).
 10. **Editar ou excluir uma tarefa** — ícones de lápis e lixeira no cartão. A
     exclusão pede confirmação.
-11. **Trocar o tema** — botão de sol/lua no cabeçalho alterna claro e escuro; a
+11. **Acompanhar o painel** — o ícone de casa no cabeçalho fecha o projeto e
+    volta ao painel inicial, com o progresso, a contagem por status de cada
+    projeto, as tarefas vencidas e os prazos da semana. Uma tarefa vencida pode
+    ser editada dali mesmo.
+12. **Trocar o tema** — botão de sol/lua no cabeçalho alterna claro e escuro; a
     preferência fica guardada no navegador.
-12. **Sair** — botão "Sair" no canto superior direito.
+13. **Sair** — botão "Sair" no canto superior direito.
 
 ---
 
@@ -274,8 +337,8 @@ mecanismo de autenticação.
                            ▼
      Form Requests   validação e normalização de entrada
      Policies        ownership, sempre negando como 404
-     Models          Project, Task, TaskAttachment, User
-     Enum            App\TaskStatus (fonte única dos status)
+     Models          Project, Task, TaskAttachment, User, UserAchievement
+     Enums           App\TaskStatus (status), App\Achievement (medalhas)
                            ▼
      PostgreSQL                  storage/app/private (disco `local`)
 ```
@@ -286,11 +349,19 @@ Pontos que valem saber antes de abrir o código:
   renderizam a mesma página Inertia `dashboard`; a diferença é só o prop
   `selectedProject`. É o único controller que envia dados para o Inertia — os
   outros respondem `back()`.
+- **Os painéis são montados no controller.** Cada bloco do painel inicial sai de
+  uma consulta agregada em `DashboardController` (contagem por projeto e status,
+  vencidas, prazos da semana), e os números de progresso vêm de
+  `User::progress()`. Com um projeto aberto esses props saem vazios em vez de
+  ausentes, para que os dois usos da mesma página concordem no formato.
 - **Não há camada de serviço.** Não existem `app/Services`, `app/Jobs`,
   `app/Observers`, `app/Notifications` nem `app/Console/Commands`. A regra de
   negócio mora nos models (`Project::prependTask()`,
-  `Project::applyTaskOrder()`, `Task::attachUploadedFile()`) e nas form
-  requests. Um controller é sempre autorizar → validar → delegar → responder.
+  `Project::applyTaskOrder()`, `Task::attachUploadedFile()`,
+  `User::progress()`, `User::unlockEarnedAchievements()`) e nas form requests.
+  O carimbo de conclusão e a entrega de medalhas são eventos do próprio `Task`,
+  e não de um observer registrado à parte. Um controller é sempre autorizar →
+  validar → delegar → responder.
 - **`bootstrap/app.php`** registra o health check `/up`, anexa
   `HandleInertiaRequests` e `AddLinkHeadersForPreloadedAssets` ao grupo web,
   chama `throttleApi()` e força resposta JSON quando a rota casa `api/*` ou o
@@ -325,11 +396,13 @@ Pontos que valem saber antes de abrir o código:
 | `description`               | text nullable                 | obrigatória na validação       |
 | `status`                    | string, default `not_started` | valor de `App\TaskStatus`      |
 | `due_at`                    | timestamp nullable            | obrigatório na validação       |
+| `completed_at`              | timestamp nullable            | carimbado ao virar concluída   |
 | `tags`                      | json, default `'[]'`          | lista de strings               |
 | `created_at` / `updated_at` | timestamp                     |                                |
 
 Índices: `[project_id, created_at]` e `[project_id, position]` — os dois modos
-como a lista é lida.
+como a lista é lida — e `[project_id, completed_at]`, que serve a leitura de
+progresso ("as tarefas concluídas destes projetos").
 
 **`task_attachments`**
 
@@ -343,6 +416,20 @@ como a lista é lida.
 | `mime_type`                 | string              | detectado a partir do conteúdo do arquivo |
 | `size`                      | unsigned bigint     | bytes                                     |
 | `created_at` / `updated_at` | timestamp           |                                           |
+
+**`user_achievements`**
+
+| Coluna                      | Tipo                | Observação                 |
+| --------------------------- | ------------------- | -------------------------- |
+| `id`                        | bigint PK           |                            |
+| `user_id`                   | bigint FK → `users` | `cascadeOnDelete`          |
+| `achievement`               | string              | valor de `App\Achievement` |
+| `unlocked_at`               | timestamp           | quando a medalha foi ganha |
+| `created_at` / `updated_at` | timestamp           |                            |
+
+Único: `[user_id, achievement]`. Uma medalha é ganha uma vez só, e a garantia
+fica no banco — não apenas em PHP — para que duas conclusões simultâneas não
+entreguem a mesma duas vezes.
 
 **`personal_access_tokens`** — tabela padrão do Sanctum (`tokenable` morph,
 `token` com o hash e índice único, `abilities`, `last_used_at`, `expires_at`).
@@ -369,6 +456,17 @@ pelo domínio: `users` (com `email` unique), `password_reset_tokens`, `sessions`
 - **`User::email()` é um Attribute mutator** que aplica `trim` e minúsculas na
   escrita — é o que faz o índice unique enxergar `Ana@Exemplo.com` e
   `ana@exemplo.com` como o mesmo e-mail.
+- **`completed_at` é coluna, não dedução do `status`.** `status` diz onde a
+  tarefa está, nunca disse quando chegou lá; pontos, sequências e medalhas são
+  todos perguntas sobre quando. A migration data as tarefas já concluídas pelo
+  `updated_at`, que para uma tarefa intocada depois do fechamento é exatamente
+  certo e para as demais é tarde, e não ausente.
+- **A medalha é gravada; o resto é recontado.** XP, nível e sequência saem das
+  tarefas a cada leitura, porque um total mantido à mão erra para sempre no dia
+  em que uma atualização falha. A medalha registra um fato datado, então é
+  escrita — e sobrevive à exclusão do projeto que a rendeu. A migration que cria
+  a tabela distribui as medalhas que o histórico já havia conquistado, senão
+  quem chega com cem tarefas fechadas abriria o painel vazio.
 - **A migration de `position` faz backfill** (`seedPositionsFromCreationOrder`)
   em PHP, e não com window function, para não depender do motor de banco.
 - Os models usam os atributos do Laravel 13 (`#[Fillable]`, `#[Hidden]`) em vez
@@ -383,7 +481,8 @@ pelo domínio: `users` (com `email` unique), `password_reset_tokens`, `sessions`
 | Form Requests      | `app/Http/Requests`                    | Validação, normalização e parte da autorização |
 | Resources          | `app/Http/Resources`                   | Representação JSON da API                      |
 | Policies           | `app/Policies`                         | Ownership (`view`, `update`, `delete`)         |
-| Enum               | `app/TaskStatus.php`                   | Status, rótulos e ordem das colunas            |
+| Enums              | `app/TaskStatus.php`                   | Status, rótulos e ordem das colunas            |
+|                    | `app/Achievement.php`                  | Medalhas, rótulos e condição de cada uma       |
 | Providers          | `app/Providers/AppServiceProvider.php` | Decisões globais e rate limit                  |
 
 Detalhes que não são óbvios pelos nomes:
@@ -406,6 +505,19 @@ Detalhes que não são óbvios pelos nomes:
   **`Api\V1\Auth\LoginRequest` deliberadamente não estende a web** (uma é
   stateless e emite token, a outra abre sessão), mas usa a **mesma chave de
   throttle** — as duas portas dividem o mesmo balde de tentativas.
+- **`Task::booted()` carimba a conclusão.** Quatro caminhos levam uma tarefa a
+  concluída — o dropdown da lista, o arrastar do quadro, o formulário de edição
+  e a API —, e uma factory ou um seeder chegam lá sem rota nenhuma. O evento
+  `saving` grava `completed_at` (e o limpa ao reabrir a tarefa) e o `saved`
+  chama `unlockEarnedAchievements()`; fazer isso nos controllers seria uma
+  edição por rota, e ainda deixaria a próxima de fora.
+- **`User::progress()` conta em vez de guardar.** Três consultas devolvem
+  conclusões, entregas no prazo e projetos zerados; nível, XP e sequências saem
+  daí em PHP. `Achievement::isEarnedBy()` responde a todas as medalhas a partir
+  desse mesmo retrato, então avaliar o catálogo inteiro não custa consulta
+  alguma. As sequências são reduzidas a dias em PHP porque `date()` se escreve
+  diferente em cada banco — e o que se percorre aqui é o histórico de uma
+  pessoa, não uma varredura de tabela.
 - **As três policies negam com `Response::denyAsNotFound()`**, então acesso
   indevido vira 404 e não 403. Não há registro em `AuthServiceProvider`: vale a
   descoberta por convenção de nomes do Laravel.
@@ -427,12 +539,15 @@ resources/js/
 ├── wayfinder/   gerado pelo Wayfinder (fora do Git)
 ├── pages/       dashboard.tsx, auth/login.tsx, auth/register.tsx
 ├── layouts/     auth-layout.tsx (cartão centralizado das telas de acesso)
-├── components/  task-list, task-board, task-card, project-sidebar,
-│                tag-chip, modal, buttons, icons, text-field,
-│                textarea-field, input-error, theme-toggle, view-toggle
+├── components/  task-list, task-board, task-card, task-form-modal,
+│                project-sidebar, panel, overview-panel, alerts-panel,
+│                timeline-panel, progress-panel, tag-chip, modal, buttons,
+│                icons, text-field, textarea-field, input-error,
+│                theme-toggle, view-toggle
 ├── lib/         theme.ts, task-view.ts, storage.ts, utils.ts,
 │                native-validation.ts
-└── types/       task.ts, project.ts, auth.ts, index.ts, global.d.ts
+└── types/       task.ts, project.ts, progress.ts, auth.ts, index.ts,
+                 global.d.ts
 ```
 
 Não existe `resources/js/hooks/`: os hooks moram em `lib/`. `theme.ts` expõe
@@ -457,6 +572,16 @@ Componentes centrais:
   `styleFor(status)`, fonte única dos tons (`card`, `select`, `column`). Status
   desconhecido cai no neutro, então acrescentar um case ao enum já renderiza
   antes de existir cor definida para ele.
+- **`task-form-modal.tsx`** — o formulário de criar e editar tarefa, tirado de
+  dentro da lista para que o painel de alertas abra exatamente o mesmo, com o
+  projeto da tarefa clicada em vez do projeto que a página tem aberto.
+- **`panel.tsx`** — a moldura dos blocos do painel: borda, título e espaçamento
+  em um lugar só, de modo que um painel novo só traga o conteúdo.
+- **`overview-panel`, `alerts-panel`, `timeline-panel` e `progress-panel`** — um
+  arquivo por bloco. Nenhum deles calcula data, offset ou porcentagem: recebem
+  do servidor rótulos e posições já prontos, no fuso da aplicação, e desenham.
+  Visão Geral e Alertas ficam lado a lado a partir de `lg` na mesma linha do
+  grid, que é deixada esticar para que os dois terminem na mesma altura.
 - **`tag-chip.tsx`** — as classes são escritas por extenso porque o scanner do
   Tailwind precisa vê-las literais no código; a paleta é restrita a tons frios,
   reservando os quentes para estado.
@@ -503,6 +628,19 @@ demais tipos.
 **Tags.** O campo é um texto com vírgulas; `prepareForValidation()` divide,
 apara espaços, descarta vazios e duplicados. Máximo de 10 tags de 30 caracteres.
 
+**Progresso e conquistas.** `completed_at` é gravado pelo model quando o status
+vira concluída e apagado quando a tarefa é reaberta; concluí-la de novo carimba
+uma data nova, porque fechá-la a segunda vez foi trabalho de outro dia. A
+experiência é 10 XP por tarefa mais 5 por entrega dentro do prazo (tarefa sem
+prazo não recebe o bônus), e o nível `n` começa em `25 × n × (n − 1)` XP. A
+sequência conta dias corridos com pelo menos uma conclusão, uma vez por dia, e
+só termina depois de um dia inteiro perdido. As medalhas são avaliadas contra a
+maior sequência já feita, e não contra a atual: no instante em que a medalha é
+ganha as duas são iguais, e ir pelo recorde faz com que uma medalha perdida por
+algum motivo ainda seja entregue na próxima conclusão, em vez de virar
+inalcançável no dia em que a sequência acaba. Cada painel só conta os projetos
+do usuário autenticado — há teste para isso em cada um dos quatro.
+
 **Privacidade.** Recurso de outro usuário responde 404, nunca 403. O dono vem
 sempre da relação do usuário autenticado (`$request->user()->projects()`), nunca
 do payload — há teste para isso. Login e cadastro devolvem a mesma mensagem para
@@ -531,20 +669,22 @@ são próprios (`App\Http\Controllers\Auth\*`, `App\Http\Requests\Auth\*`).
 
 `tests/Pest.php` liga `TestCase` e `RefreshDatabase` à suíte `Feature` e define
 o helper global `taskPayload()`, usado por quase todo teste de tarefa. Toda a
-cobertura real está em `tests/Feature` (21 arquivos); `tests/Unit` tem apenas o
+cobertura real está em `tests/Feature` (24 arquivos); `tests/Unit` tem apenas o
 exemplo do esqueleto.
 
-| Arquivo                                          | O que garante                                                                                                                          |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `TaskDeadlineTest`                               | Prazo no passado é recusado, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo                            |
-| `TaskReorderTest`                                | A ordem é gravada, sobrevive a uma edição posterior, tarefa nova vai para o topo e listas que não são permutação são recusadas         |
-| `TaskMoveTest`                                   | Status e ordem mudam juntos ou não mudam, e tarefa de outro projeto dá 404                                                             |
-| `TaskStatusTest`                                 | Tarefa nasce `not_started`, percorre os quatro status e recusa status desconhecido                                                     |
-| `LocalizationTest`                               | Nenhuma mensagem do framework ficou em inglês                                                                                          |
-| `Models/UserTest`                                | E-mail é canonizado e o índice unique pega variações de caixa                                                                          |
-| `Policies/ProjectPolicyTest`                     | A negação chega como 404                                                                                                               |
-| `Api/V1/RateLimitTest`                           | 60/min por usuário do token, com fallback por IP e 429 ao estourar                                                                     |
-| `Api/V1/Auth/AuthenticatedSessionControllerTest` | Emissão de token, e-mail sem distinção de caixa, mensagem única de erro, bloqueio após cinco tentativas e revogação só do token em uso |
+| Arquivo                                          | O que garante                                                                                                                                                   |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DashboardTest`                                  | Cada um dos quatro painéis conta e ordena o que deve, ignora o que é de outro usuário e sai vazio com um projeto aberto                                         |
+| `GamificationTest`                               | A conclusão é carimbada pelos quatro caminhos e limpa ao reabrir, XP e níveis batem, a sequência sobrevive ao dia de hoje e a medalha é entregue uma vez e fica |
+| `TaskDeadlineTest`                               | Prazo no passado é recusado, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo                                                     |
+| `TaskReorderTest`                                | A ordem é gravada, sobrevive a uma edição posterior, tarefa nova vai para o topo e listas que não são permutação são recusadas                                  |
+| `TaskMoveTest`                                   | Status e ordem mudam juntos ou não mudam, e tarefa de outro projeto dá 404                                                                                      |
+| `TaskStatusTest`                                 | Tarefa nasce `not_started`, percorre os quatro status e recusa status desconhecido                                                                              |
+| `LocalizationTest`                               | Nenhuma mensagem do framework ficou em inglês                                                                                                                   |
+| `Models/UserTest`                                | E-mail é canonizado e o índice unique pega variações de caixa                                                                                                   |
+| `Policies/ProjectPolicyTest`                     | A negação chega como 404                                                                                                                                        |
+| `Api/V1/RateLimitTest`                           | 60/min por usuário do token, com fallback por IP e 429 ao estourar                                                                                              |
+| `Api/V1/Auth/AuthenticatedSessionControllerTest` | Emissão de token, e-mail sem distinção de caixa, mensagem única de erro, bloqueio após cinco tentativas e revogação só do token em uso                          |
 
 ---
 
