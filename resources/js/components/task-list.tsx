@@ -1,50 +1,31 @@
 import { useEffect, useState } from 'react';
 import { Form, router } from '@inertiajs/react';
-import { destroy as destroyAttachment } from '@/actions/App/Http/Controllers/TaskAttachmentController';
 import {
     destroy,
     move,
     reorder,
-    store,
-    update,
     updateStatus,
 } from '@/actions/App/Http/Controllers/TaskController';
 import {
     AddButton,
     dangerButtonClasses,
     iconButtonClasses,
-    primaryButtonClasses,
     secondaryButtonClasses,
 } from '@/components/buttons';
 import { GripIcon } from '@/components/icons';
 import Modal from '@/components/modal';
 import TaskBoard from '@/components/task-board';
-import TaskCard, { AttachmentChip, styleFor } from '@/components/task-card';
-import TextField from '@/components/text-field';
-import TextareaField from '@/components/textarea-field';
+import TaskCard, { styleFor } from '@/components/task-card';
+import TaskFormModal from '@/components/task-form-modal';
 import type { TaskView } from '@/lib/task-view';
 import { cn } from '@/lib/utils';
-import type { Project, StatusOption, Task, TaskAttachment } from '@/types';
+import type { Project, StatusOption, Task } from '@/types';
 
 type Dialog =
     | { type: 'none' }
     | { type: 'create' }
     | { type: 'edit'; taskId: number }
     | { type: 'delete'; taskId: number };
-
-/**
- * Validation for a file list arrives keyed by position — `attachments.0`,
- * `attachments.2` — so there is no single key to read. The first message is
- * enough to tell the user what went wrong.
- */
-function firstErrorFor(
-    errors: Record<string, string>,
-    field: string,
-): string | undefined {
-    return Object.entries(errors).find(
-        ([key]) => key === field || key.startsWith(`${field}.`),
-    )?.[1];
-}
 
 export default function TaskList({
     project,
@@ -84,14 +65,6 @@ export default function TaskList({
         dialog.type === 'edit' ? findTask(dialog.taskId) : undefined;
     const deleting =
         dialog.type === 'delete' ? findTask(dialog.taskId) : undefined;
-    const isEditing = editing !== undefined;
-
-    const removeAttachment = (attachment: TaskAttachment) => {
-        router.delete(destroyAttachment.url(attachment.id), {
-            preserveScroll: true,
-            preserveState: true,
-        });
-    };
 
     const changeStatus = (task: Task, status: string) => {
         // Applied locally first so the dropdown does not snap back to the old
@@ -328,160 +301,13 @@ export default function TaskList({
                 </ul>
             )}
 
-            <Modal
-                open={dialog.type === 'create' || isEditing}
+            <TaskFormModal
+                open={dialog.type === 'create' || editing !== undefined}
                 onClose={close}
-                title={isEditing ? 'Editar tarefa' : 'Nova tarefa'}
-                size="lg"
-            >
-                <Form
-                    // Remounting on a changed target lets the fields pick up the
-                    // right defaults instead of keeping the previous values.
-                    key={isEditing ? `edit-${editing.id}` : 'create'}
-                    {...(isEditing
-                        ? update.form(editing.id)
-                        : store.form(project.id))}
-                    resetOnSuccess
-                    onSuccess={close}
-                    className="flex flex-col gap-4"
-                >
-                    {({ errors, processing }) => (
-                        <>
-                            <TextField
-                                label="Título"
-                                name="title"
-                                type="text"
-                                placeholder="O que precisa ser feito"
-                                defaultValue={editing?.title ?? ''}
-                                required
-                                autoFocus
-                                error={errors.title}
-                            />
-
-                            <TextField
-                                label="Descrição curta"
-                                name="short_description"
-                                type="text"
-                                placeholder="Um resumo de uma linha"
-                                defaultValue={editing?.short_description ?? ''}
-                                required
-                                error={errors.short_description}
-                            />
-
-                            <TextareaField
-                                label="Descrição completa"
-                                name="description"
-                                rows={4}
-                                placeholder="Detalhes, critérios de aceite, links…"
-                                defaultValue={editing?.description ?? ''}
-                                required
-                                error={errors.description}
-                            />
-
-                            <TextField
-                                label="Prazo"
-                                name="due_at"
-                                type="datetime-local"
-                                // A deadline a task already has may be older
-                                // than `now`, and keeping it is allowed, so the
-                                // picker must not refuse to show it back.
-                                min={
-                                    editing?.due_at && editing.due_at < now
-                                        ? editing.due_at
-                                        : now
-                                }
-                                defaultValue={editing?.due_at ?? ''}
-                                required
-                                error={errors.due_at}
-                            />
-
-                            <TextField
-                                label="Tags"
-                                name="tags"
-                                type="text"
-                                placeholder="urgente, backend, cliente"
-                                defaultValue={editing?.tags.join(', ') ?? ''}
-                                error={firstErrorFor(errors, 'tags')}
-                            />
-
-                            {isEditing && editing.attachments.length > 0 ? (
-                                <div className="flex flex-col gap-1.5">
-                                    <span className="text-[13px] font-medium">
-                                        Anexos atuais
-                                    </span>
-                                    <ul className="flex flex-wrap gap-2">
-                                        {editing.attachments.map(
-                                            (attachment) => (
-                                                <li
-                                                    key={attachment.id}
-                                                    className="min-w-0"
-                                                >
-                                                    <AttachmentChip
-                                                        attachment={attachment}
-                                                        onRemove={() =>
-                                                            removeAttachment(
-                                                                attachment,
-                                                            )
-                                                        }
-                                                    />
-                                                </li>
-                                            ),
-                                        )}
-                                    </ul>
-                                </div>
-                            ) : null}
-
-                            <div className="flex flex-col gap-1.5">
-                                <label
-                                    htmlFor="attachments"
-                                    className="text-[13px] font-medium"
-                                >
-                                    {isEditing
-                                        ? 'Adicionar anexos ou fotos'
-                                        : 'Anexos e fotos'}
-                                </label>
-
-                                <input
-                                    id="attachments"
-                                    name="attachments[]"
-                                    type="file"
-                                    multiple
-                                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip"
-                                    className="w-full rounded-md border border-[#e3e3e0] bg-white p-2 text-[13px] file:mr-3 file:rounded file:border-0 file:bg-[#f4f4f2] file:px-3 file:py-1.5 file:text-[13px] file:font-medium dark:border-[#3E3E3A] dark:bg-[#161615] dark:file:bg-[#2a2a28] dark:file:text-[#EDEDEC]"
-                                />
-
-                                <span className="text-[12px] text-[#706f6c] dark:text-[#A1A09A]">
-                                    Até 10 arquivos, 10 MB cada.
-                                </span>
-
-                                {firstErrorFor(errors, 'attachments') ? (
-                                    <span className="text-[13px] text-red-600">
-                                        {firstErrorFor(errors, 'attachments')}
-                                    </span>
-                                ) : null}
-                            </div>
-
-                            <div className="flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={close}
-                                    className={secondaryButtonClasses}
-                                >
-                                    Cancelar
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={processing}
-                                    className={primaryButtonClasses}
-                                >
-                                    {processing ? 'Salvando…' : 'Salvar'}
-                                </button>
-                            </div>
-                        </>
-                    )}
-                </Form>
-            </Modal>
+                task={editing}
+                projectId={project.id}
+                now={now}
+            />
 
             <Modal
                 open={deleting !== undefined}

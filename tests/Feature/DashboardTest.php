@@ -4,6 +4,7 @@ use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskAttachment;
 use App\Models\User;
+use App\TaskStatus;
 
 test('renders the dashboard for an authenticated user', function () {
     $this->actingAs(User::factory()->create())
@@ -138,5 +139,267 @@ test('lists the most recently created task first', function () {
         ->assertInertia(fn ($page) => $page
             ->where('tasks.0.id', $newer->id)
             ->where('tasks.1.id', $older->id)
+        );
+});
+
+test('counts the tasks of each project by status for the overview panel', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user, 'owner')->create([
+        'description' => 'Reformar o site',
+    ]);
+
+    Task::factory()->for($project)->count(2)
+        ->status(TaskStatus::NotStarted)->create();
+    Task::factory()->for($project)->status(TaskStatus::InProgress)->create();
+    Task::factory()->for($project)->count(3)
+        ->status(TaskStatus::Completed)->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->has('overview', 1)
+            ->where('overview.0.id', $project->id)
+            ->where('overview.0.description', 'Reformar o site')
+            ->where('overview.0.counts.not_started', 2)
+            ->where('overview.0.counts.in_progress', 1)
+            ->where('overview.0.counts.completed', 3)
+            // A status the project has no task at still gets a key, so the
+            // panel can render a column for every status.
+            ->where('overview.0.counts.cancelled', 0)
+            ->where('overview.0.total', 6)
+        );
+});
+
+test('does not count the tasks of another project towards a project', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user, 'owner')
+        ->create(['created_at' => now()]);
+    $other = Project::factory()->for($user, 'owner')
+        ->create(['created_at' => now()->subDay()]);
+    Task::factory()->for($other)->status(TaskStatus::Completed)->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->has('overview', 2)
+            ->where('overview.0.id', $project->id)
+            ->where('overview.0.total', 0)
+            ->where('overview.1.id', $other->id)
+            ->where('overview.1.total', 1)
+        );
+});
+
+test('does not count the tasks of a project owned by someone else', function () {
+    $user = User::factory()->create();
+    Task::factory()->for(Project::factory()->for(User::factory(), 'owner'))->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('overview', 0));
+});
+
+test('sends no overview once a project is selected', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create();
+
+    $this->actingAs($project->owner)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn ($page) => $page->has('overview', 0));
+});
+
+test('lists overdue tasks that are still open for the alerts panel', function () {
+    $project = Project::factory()->create();
+    $overdue = Task::factory()->for($project)->create([
+        'short_description' => 'Revisar o contrato',
+        'due_at' => now()->subDay(),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->has('alerts', 1)
+            ->where('alerts.0.id', $overdue->id)
+            ->where('alerts.0.short_description', 'Revisar o contrato')
+            ->where('alerts.0.due_at_label', $overdue->due_at->format('d/m/Y H:i'))
+            // The whole task goes out so clicking it can open the edit form.
+            ->where('alerts.0.project_id', $project->id)
+            ->has('alerts.0.attachments')
+        );
+});
+
+test('does not alert about a task whose deadline has not passed', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create(['due_at' => now()->addDay()]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('alerts', 0));
+});
+
+test('does not alert about an overdue task that is completed or cancelled', function (TaskStatus $status) {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->status($status)->create([
+        'due_at' => now()->subWeek(),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('alerts', 0));
+})->with([
+    'concluida' => TaskStatus::Completed,
+    'cancelada' => TaskStatus::Cancelled,
+]);
+
+test('alerts about an overdue task that is not started or in progress', function (TaskStatus $status) {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->status($status)->create([
+        'due_at' => now()->subWeek(),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('alerts', 1));
+})->with([
+    'nao iniciada' => TaskStatus::NotStarted,
+    'em andamento' => TaskStatus::InProgress,
+]);
+
+test('does not alert about a task without a deadline', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->minimal()->create();
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('alerts', 0));
+});
+
+test('does not alert about an overdue task belonging to another user', function () {
+    Task::factory()->create(['due_at' => now()->subDay()]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('alerts', 0));
+});
+
+test('lists the most overdue task first', function () {
+    $project = Project::factory()->create();
+    $late = Task::factory()->for($project)->create(['due_at' => now()->subDay()]);
+    $later = Task::factory()->for($project)->create(['due_at' => now()->subWeek()]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->where('alerts.0.id', $later->id)
+            ->where('alerts.1.id', $late->id)
+        );
+});
+
+test('sends no alerts once a project is selected', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create(['due_at' => now()->subDay()]);
+
+    $this->actingAs($project->owner)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn ($page) => $page->has('alerts', 0));
+});
+
+test('plots the tasks due over the next seven days on the timeline', function () {
+    $project = Project::factory()->create();
+    $task = Task::factory()->for($project)->create([
+        'short_description' => 'Enviar a proposta',
+        'due_at' => today()->addDays(2)->setTime(12, 0),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->has('timeline.tasks', 1)
+            ->where('timeline.tasks.0.id', $task->id)
+            ->where('timeline.tasks.0.short_description', 'Enviar a proposta')
+            ->where('timeline.tasks.0.status_label', 'Não iniciada')
+            ->where('timeline.tasks.0.due_at_label', $task->due_at->format('d/m/Y H:i'))
+            // Midday of the third of eight days: two whole days in, plus half
+            // of the third, over a window of eight.
+            ->where('timeline.tasks.0.offset', 31.25)
+        );
+});
+
+test('sends a day mark for today and for each of the seven days ahead', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->has('timeline.days', 8)
+            ->where('timeline.days.0.label', 'hoje')
+            ->where('timeline.days.0.date_label', today()->format('d/m'))
+            ->where('timeline.days.0.offset', 0)
+            ->where('timeline.days.7.date_label', today()->addDays(7)->format('d/m'))
+            ->where('timeline.days.7.offset', 87.5)
+        );
+});
+
+test('does not plot a task due after the seventh day ahead', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create([
+        'due_at' => today()->addDays(8)->addHour(),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('timeline.tasks', 0));
+});
+
+test('does not plot a task whose deadline has already passed', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create(['due_at' => now()->subHour()]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('timeline.tasks', 0));
+});
+
+test('does not plot an upcoming task that is completed or cancelled', function (TaskStatus $status) {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->status($status)->create([
+        'due_at' => now()->addDay(),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('timeline.tasks', 0));
+})->with([
+    'concluida' => TaskStatus::Completed,
+    'cancelada' => TaskStatus::Cancelled,
+]);
+
+test('does not plot an upcoming task belonging to another user', function () {
+    Task::factory()->create(['due_at' => now()->addDay()]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('timeline.tasks', 0));
+});
+
+test('plots the soonest deadline first', function () {
+    $project = Project::factory()->create();
+    $later = Task::factory()->for($project)->create(['due_at' => now()->addDays(3)]);
+    $sooner = Task::factory()->for($project)->create(['due_at' => now()->addDay()]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->where('timeline.tasks.0.id', $sooner->id)
+            ->where('timeline.tasks.1.id', $later->id)
+        );
+});
+
+test('sends no timeline once a project is selected', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create(['due_at' => now()->addDay()]);
+
+    $this->actingAs($project->owner)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn ($page) => $page
+            ->has('timeline.days', 0)
+            ->has('timeline.tasks', 0)
         );
 });
