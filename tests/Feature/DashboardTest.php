@@ -1,5 +1,6 @@
 <?php
 
+use App\Achievement;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskAttachment;
@@ -402,4 +403,36 @@ test('sends no timeline once a project is selected', function () {
             ->has('timeline.days', 0)
             ->has('timeline.tasks', 0)
         );
+});
+
+test('sends the level, the streak and the whole badge catalogue', function () {
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create([
+        'status' => TaskStatus::Completed,
+        'due_at' => now()->addDay(),
+        'completed_at' => now(),
+    ]);
+
+    $this->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->where('progress.level', 1)
+            ->where('progress.xp', 15)
+            ->where('progress.completed', 1)
+            ->where('progress.streak', 1)
+            ->has('progress.achievements', count(Achievement::cases()))
+            ->where('progress.achievements.0.value', Achievement::FirstTask->value)
+            ->where('progress.achievements.0.unlocked', true)
+            ->where('progress.achievements.0.is_recent', true)
+            ->where('progress.achievements.1.unlocked', false)
+            ->where('progress.achievements.1.unlocked_at_label', null)
+        );
+});
+
+test('sends no progress once a project is selected', function () {
+    $project = Project::factory()->create();
+
+    $this->actingAs($project->owner)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn ($page) => $page->where('progress', null));
 });

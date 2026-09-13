@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\TaskStatus;
+use Carbon\CarbonInterface;
 use Database\Factories\TaskFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $description
  * @property TaskStatus $status
  * @property Carbon|null $due_at
+ * @property CarbonInterface|null $completed_at
  * @property list<string> $tags
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -47,13 +49,43 @@ class Task extends Model
     ];
 
     /**
-     * Delete the attachments through the model so their files leave the disk.
+     * Keep `completed_at` true to `status`, and let the owner earn badges.
      *
-     * The foreign key cascade would remove the rows without ever loading a
-     * model, so the uploaded files would survive as orphans nobody can reach.
+     * Four routes can move a task to completed — the list's status dropdown,
+     * the board's drag, the edit form, and the API — and a factory or a seeder
+     * can do it without a route at all. Hooking the model catches every one of
+     * them at once, where hooking the controllers would need an edit per route
+     * and would still miss the next one.
+     *
+     * The attachments are deleted through the model rather than by the foreign
+     * key cascade, which would remove the rows without ever loading a model and
+     * leave the uploaded files as orphans nobody can reach.
      */
     protected static function booted(): void
     {
+        static::saving(function (Task $task): void {
+            if (! $task->isDirty('status')) {
+                return;
+            }
+
+            // Reopening a task clears the date; completing it again stamps a
+            // new one, because closing it the second time is work that happened
+            // on the second day.
+            $task->completed_at = $task->status === TaskStatus::Completed
+                ? $task->completed_at ?? now()
+                : null;
+        });
+
+        static::saved(function (Task $task): void {
+            if ($task->completed_at === null) {
+                return;
+            }
+
+            if ($task->wasRecentlyCreated || $task->wasChanged('completed_at')) {
+                $task->project->owner->unlockEarnedAchievements();
+            }
+        });
+
         static::deleting(function (Task $task): void {
             $task->attachments->each->delete();
         });
@@ -120,6 +152,7 @@ class Task extends Model
     {
         return [
             'due_at' => 'datetime',
+            'completed_at' => 'datetime',
             'status' => TaskStatus::class,
             'tags' => 'array',
         ];

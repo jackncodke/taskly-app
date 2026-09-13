@@ -3,6 +3,7 @@ import AlertsPanel from '@/components/alerts-panel';
 import { headerButtonClasses } from '@/components/buttons';
 import { HomeIcon } from '@/components/icons';
 import OverviewPanel from '@/components/overview-panel';
+import ProgressPanel from '@/components/progress-panel';
 import ProjectSidebar from '@/components/project-sidebar';
 import TaskList from '@/components/task-list';
 import TimelinePanel from '@/components/timeline-panel';
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { dashboard, logout } from '@/routes';
 import type {
     AlertTask,
+    Progress,
     Project,
     ProjectOverview,
     StatusOption,
@@ -28,6 +30,7 @@ export default function Dashboard({
     overview,
     alerts,
     timeline,
+    progress,
     now,
 }: {
     projects: Project[];
@@ -37,6 +40,7 @@ export default function Dashboard({
     overview: ProjectOverview[];
     alerts: AlertTask[];
     timeline: Timeline;
+    progress: Progress | null;
     now: string;
 }) {
     const { auth } = usePage().props;
@@ -119,12 +123,21 @@ export default function Dashboard({
 
                                 <div className="mt-4 flex flex-col gap-6">
                                     {/*
-                                        These two sit side by side from `lg`
+                                        Progress runs the full width at the
+                                        top: the bar and the badges want the
+                                        room, and how the week has gone reads
+                                        before what is overdue in it.
+
+                                        The next two sit side by side from `lg`
                                         up, with the overview taking whatever
                                         the alerts column does not need, and
                                         stack on a narrow screen. The timeline
                                         runs the full width under both.
                                     */}
+                                    {progress && (
+                                        <ProgressPanel progress={progress} />
+                                    )}
+
                                     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
                                         <OverviewPanel
                                             projects={overview}

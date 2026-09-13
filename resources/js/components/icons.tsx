@@ -201,3 +201,43 @@ export function HomeIcon({ className }: IconProps) {
         </svg>
     );
 }
+
+export function FlameIcon({ className }: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={className}
+        >
+            <path d="M12 3c.5 2.5-1 3.8-2.2 5C8.2 9.5 7 11 7 13.5A5 5 0 0 0 17 14c0-2-.8-3.6-2-5.2-1 .8-1.7.9-2.3.6.8-1.6 1-4.2-.7-6.4Z" />
+            <path d="M12 21a3 3 0 0 1-3-3c0-1.4 1-2.3 1.7-3.2.5.6 1 .8 1.6.5-.3 1.1 0 1.9.6 2.7.6-.4.9-1 1-1.7.7.8 1.1 1.6 1.1 2.5a3 3 0 0 1-3 3Z" />
+        </svg>
+    );
+}
+
+export function TrophyIcon({ className }: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={className}
+        >
+            <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+            <path d="M7 6H5a2 2 0 0 0 0 4h2" />
+            <path d="M17 6h2a2 2 0 0 1 0 4h-2" />
+            <path d="M12 14v3" />
+            <path d="M9 20h6" />
+            <path d="M10 17h4l.5 3h-5Z" />
+        </svg>
+    );
+}

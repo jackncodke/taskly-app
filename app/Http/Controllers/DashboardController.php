@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Achievement;
 use App\Http\Requests\StoreTaskRequest;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\UserAchievement;
 use App\TaskStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -29,6 +31,7 @@ class DashboardController extends Controller
             'overview' => $this->taskCountsByProject($projects),
             'alerts' => $this->overdueTasks($projects),
             'timeline' => $this->upcomingTasks($projects),
+            'progress' => $this->gamification($request),
             'now' => $this->earliestDeadline(),
         ]);
     }
@@ -61,6 +64,10 @@ class DashboardController extends Controller
             'overview' => [],
             'alerts' => [],
             'timeline' => ['days' => [], 'tasks' => []],
+            // Null rather than the empty stand-in the lists above get: an empty
+            // list is still a list, but there is no such thing as an empty
+            // level. The front end reads the null as nothing to draw.
+            'progress' => null,
             'now' => $this->earliestDeadline(),
         ]);
     }
@@ -227,6 +234,61 @@ class DashboardController extends Controller
             ->all();
 
         return ['days' => $marks, 'tasks' => $tasks];
+    }
+
+    /**
+     * The experience, the streak and the badges behind the "Progresso" panel.
+     *
+     * The numbers come from the user rather than from a query written here:
+     * they are counted from the completed tasks themselves, so they cannot
+     * drift the way a stored total can.
+     *
+     * The whole catalogue goes out, locked badges included. A grey badge with
+     * its condition written on it is what tells someone what to aim at next;
+     * sending only the earned ones would leave the panel silent exactly when it
+     * has the most to say.
+     *
+     * @return array{level: int, xp: int, xp_into_level: int, xp_for_next_level: int, level_percent: float, completed: int, on_time: int, streak: int, longest_streak: int, achievements: array<int, array{value: string, label: string, description: string, unlocked: bool, unlocked_at_label: string|null, is_recent: bool}>}
+     */
+    private function gamification(Request $request): array
+    {
+        $user = $request->user();
+        $progress = $user->progress();
+
+        $unlocked = $user->achievements()
+            ->get()
+            ->keyBy(fn (UserAchievement $earned): string => $earned->achievement->value);
+
+        return [
+            'level' => $progress['level'],
+            'xp' => $progress['xp'],
+            'xp_into_level' => $progress['xp_into_level'],
+            'xp_for_next_level' => $progress['xp_for_next_level'],
+            'level_percent' => $progress['level_percent'],
+            'completed' => $progress['completed'],
+            'on_time' => $progress['on_time'],
+            'streak' => $progress['streak'],
+            'longest_streak' => $progress['longest_streak'],
+            'achievements' => array_map(
+                function (Achievement $achievement) use ($unlocked): array {
+                    $earned = $unlocked->get($achievement->value);
+
+                    return [
+                        'value' => $achievement->value,
+                        'label' => $achievement->label(),
+                        'description' => $achievement->description(),
+                        'unlocked' => $earned !== null,
+                        'unlocked_at_label' => $earned?->unlocked_at->format('d/m/Y'),
+                        // Worth pointing out on the panel: the badge was won
+                        // since yesterday, so the visit showing it off is
+                        // probably the first one after winning it.
+                        'is_recent' => $earned !== null
+                            && $earned->unlocked_at->greaterThan(now()->subDay()),
+                    ];
+                },
+                Achievement::cases()
+            ),
+        ];
     }
 
     /**
