@@ -131,14 +131,17 @@ export default function Dashboard({
                                         The next two sit side by side from `lg`
                                         up, with the overview taking whatever
                                         the alerts column does not need, and
-                                        stack on a narrow screen. The timeline
-                                        runs the full width under both.
+                                        stack on a narrow screen. The row is
+                                        left to stretch, so the two end on the
+                                        same line however tall either one
+                                        grows. The timeline runs the full
+                                        width under both.
                                     */}
                                     {progress && (
                                         <ProgressPanel progress={progress} />
                                     )}
 
-                                    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
+                                    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
                                         <OverviewPanel
                                             projects={overview}
                                             statuses={statuses}
