@@ -25,6 +25,35 @@
             })();
         </script>
 
+        {{-- Hands the browser's timezone to the server, which has no other way
+             of learning it: deadlines are wall clock readings, so the rule that
+             refuses one in the past and the panels that call one overdue have
+             to be read on this clock. Keep the cookie name in sync with
+             App\DeadlineClock. --}}
+        <script>
+            (function () {
+                var zone;
+
+                // Ancient browsers have no Intl, and a locked-down one can
+                // throw here. The server falls back to its own timezone.
+                try {
+                    zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                } catch (e) {
+                    return;
+                }
+
+                if (!zone) {
+                    return;
+                }
+
+                // Rewritten on every document load, so moving timezone is
+                // picked up on the next one rather than a year from now.
+                document.cookie = 'interface_timezone=' + encodeURIComponent(zone)
+                    + ';path=/;max-age=31536000;samesite=lax'
+                    + (location.protocol === 'https:' ? ';secure' : '');
+            })();
+        </script>
+
         {{-- No SVG here on purpose: the mark is drawn artwork rather than a
              vector, so an SVG could only wrap the same pixels — and a browser
              that finds one prefers it, which would replace the 16px drawn for

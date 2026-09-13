@@ -90,7 +90,7 @@ class UpdateTaskRequest extends FormRequest
                 'date',
                 ...$this->keepsStoredDeadline()
                     ? []
-                    : ['after_or_equal:'.StoreTaskRequest::earliestDeadline()],
+                    : ['after_or_equal:'.StoreTaskRequest::earliestDeadline($this)],
             ],
             'tags' => ['array', 'max:10'],
             'tags.*' => ['string', 'max:30'],

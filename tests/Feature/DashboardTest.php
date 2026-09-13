@@ -1,11 +1,13 @@
 <?php
 
 use App\Achievement;
+use App\DeadlineClock;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskAttachment;
 use App\Models\User;
 use App\TaskStatus;
+use Illuminate\Support\Carbon;
 
 test('renders the dashboard for an authenticated user', function () {
     $this->actingAs(User::factory()->create())
@@ -235,6 +237,39 @@ test('does not alert about a task whose deadline has not passed', function () {
     $this->actingAs($project->owner)
         ->get(route('dashboard'))
         ->assertInertia(fn ($page) => $page->has('alerts', 0));
+});
+
+test('does not alert about a deadline that has not passed on the interface clock', function () {
+    // 23:00 of the 11th in São Paulo is 02:00 of the 12th in UTC, so a task
+    // due at 23:30 still has half an hour where the visitor is while the
+    // application's clock has it half an hour late.
+    Carbon::setTestNow(Carbon::parse('2026-09-12 02:00:00'));
+
+    $project = Project::factory()->create();
+    Task::factory()->for($project)->create(['due_at' => '2026-09-11 23:30:00']);
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'America/Sao_Paulo')
+        ->actingAs($project->owner)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->has('alerts', 0)
+            // It is still ahead, so it belongs to the other panel.
+            ->has('timeline.tasks', 1)
+        );
+});
+
+test('starts the timeline at midnight on the interface clock', function () {
+    // The application timezone has already turned the page to the 12th; the
+    // visitor is still on the 11th, and "hoje" has to mean theirs.
+    Carbon::setTestNow(Carbon::parse('2026-09-12 02:00:00'));
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'America/Sao_Paulo')
+        ->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->where('timeline.days.0.label', 'hoje')
+            ->where('timeline.days.0.date_label', '11/09')
+        );
 });
 
 test('does not alert about an overdue task that is completed or cancelled', function (TaskStatus $status) {

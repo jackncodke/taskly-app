@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Achievement;
+use App\DeadlineClock;
 use App\Http\Requests\StoreTaskRequest;
 use App\Models\Project;
 use App\Models\Task;
@@ -22,6 +23,7 @@ class DashboardController extends Controller
     public function index(Request $request): Response
     {
         $projects = $this->projectsOf($request);
+        $now = DeadlineClock::now($request);
 
         return Inertia::render('dashboard', [
             'projects' => $projects,
@@ -29,10 +31,10 @@ class DashboardController extends Controller
             'tasks' => [],
             'statuses' => TaskStatus::options(),
             'overview' => $this->taskCountsByProject($projects),
-            'alerts' => $this->overdueTasks($projects),
-            'timeline' => $this->upcomingTasks($projects),
+            'alerts' => $this->overdueTasks($projects, $now),
+            'timeline' => $this->upcomingTasks($projects, $now),
             'progress' => $this->gamification($request),
-            'now' => $this->earliestDeadline(),
+            'now' => $this->earliestDeadline($request),
         ]);
     }
 
@@ -68,7 +70,7 @@ class DashboardController extends Controller
             // list is still a list, but there is no such thing as an empty
             // level. The front end reads the null as nothing to draw.
             'progress' => null,
-            'now' => $this->earliestDeadline(),
+            'now' => $this->earliestDeadline($request),
         ]);
     }
 
@@ -77,11 +79,12 @@ class DashboardController extends Controller
      * wants it.
      *
      * Sent from here rather than read off the browser's clock so the `min` the
-     * picker enforces and the rule the server enforces are the same instant.
+     * picker enforces and the rule the server enforces are the same reading —
+     * of the visitor's own clock, which is the one the rule now asks.
      */
-    private function earliestDeadline(): string
+    private function earliestDeadline(Request $request): string
     {
-        return Carbon::parse(StoreTaskRequest::earliestDeadline())
+        return Carbon::parse(StoreTaskRequest::earliestDeadline($request))
             ->format('Y-m-d\TH:i');
     }
 
@@ -157,9 +160,10 @@ class DashboardController extends Controller
      * that form writes every field back.
      *
      * @param  array<int, array{id: int, description: string}>  $projects
+     * @param  Carbon  $now  The interface's clock, from DeadlineClock.
      * @return array<int, array<string, mixed>>
      */
-    private function overdueTasks(array $projects): array
+    private function overdueTasks(array $projects, Carbon $now): array
     {
         return Task::query()
             // Eager loaded so the attachment list costs one query instead of
@@ -169,7 +173,7 @@ class DashboardController extends Controller
             ->whereNotIn('status', [TaskStatus::Completed, TaskStatus::Cancelled])
             // A null deadline is not late; the comparison drops those rows on
             // its own.
-            ->where('due_at', '<', now())
+            ->where('due_at', '<', $now)
             // Most overdue first, which is the order they need attention in.
             ->orderBy('due_at')
             ->get()
@@ -190,16 +194,19 @@ class DashboardController extends Controller
      * the day the page was opened.
      *
      * `offset` is where a deadline falls across that window, from 0 to 100. It
-     * is worked out here, against the same clock that formats every other date
-     * in this application, rather than from the visitor's browser time.
+     * is worked out here, once, rather than in the browser, so every mark on
+     * the chart comes from one reading of the clock.
      *
      * @param  array<int, array{id: int, description: string}>  $projects
+     * @param  Carbon  $now  The interface's clock, from DeadlineClock.
      * @return array{days: array<int, array{label: string, date_label: string, offset: float}>, tasks: array<int, array<string, mixed>>}
      */
-    private function upcomingTasks(array $projects): array
+    private function upcomingTasks(array $projects, Carbon $now): array
     {
         $days = 8;
-        $start = today();
+        // Midnight where the visitor is, so "hoje" is their today and not the
+        // application timezone's, which may already have turned the page.
+        $start = $now->copy()->startOfDay();
         $end = $start->copy()->addDays($days);
         $window = $start->diffInSeconds($end);
 
@@ -218,7 +225,7 @@ class DashboardController extends Controller
             ->whereNotIn('status', [TaskStatus::Completed, TaskStatus::Cancelled])
             // From now, not from the start of the window: a deadline earlier
             // today has already passed, and belongs to the alerts panel.
-            ->whereBetween('due_at', [now(), $end])
+            ->whereBetween('due_at', [$now, $end])
             ->orderBy('due_at')
             ->get()
             // Only what the chart draws. The whole task is not sent because

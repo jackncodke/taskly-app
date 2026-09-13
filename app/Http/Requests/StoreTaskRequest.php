@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\DeadlineClock;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class StoreTaskRequest extends FormRequest
@@ -45,13 +47,17 @@ class StoreTaskRequest extends FormRequest
     /**
      * The earliest deadline a task may be given.
      *
-     * Rounded down to the minute because the form's `datetime-local` input has
-     * no seconds: comparing against the current second would reject the very
-     * minute the picker is offering as its earliest choice.
+     * Read on the interface's clock rather than the application's, because a
+     * `datetime-local` value is a wall clock reading from wherever the visitor
+     * is — see DeadlineClock.
+     *
+     * Rounded down to the minute because that input has no seconds: comparing
+     * against the current second would reject the very minute the picker is
+     * offering as its earliest choice.
      */
-    public static function earliestDeadline(): string
+    public static function earliestDeadline(Request $request): string
     {
-        return now()->startOfMinute()->toDateTimeString();
+        return DeadlineClock::now($request)->startOfMinute()->toDateTimeString();
     }
 
     /**
@@ -65,7 +71,7 @@ class StoreTaskRequest extends FormRequest
             'title' => ['required', 'string', 'max:255'],
             'short_description' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:10000'],
-            'due_at' => ['required', 'date', 'after_or_equal:'.self::earliestDeadline()],
+            'due_at' => ['required', 'date', 'after_or_equal:'.self::earliestDeadline($this)],
             'tags' => ['array', 'max:10'],
             'tags.*' => ['string', 'max:30'],
             'attachments' => ['array', 'max:10'],

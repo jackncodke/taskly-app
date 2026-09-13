@@ -37,9 +37,10 @@ exposto por uma API REST versionada em `/api/v1`, autenticada por token.
 - Campos: título, descrição curta, descrição completa, prazo (`due_at`), status,
   tags (até 10, máx. 30 caracteres cada) e anexos.
 - Título, descrição curta, descrição completa e prazo são obrigatórios.
-- O prazo não pode ser anterior ao momento atual na criação. Na edição, manter o
-  prazo já gravado é sempre permitido — senão uma tarefa atrasada ficaria
-  impossível de editar sem escolher outra data.
+- O prazo não pode ser anterior ao momento atual na criação — "atual" pelo
+  relógio de quem está preenchendo, não pelo fuso da aplicação. Na edição,
+  manter o prazo já gravado é sempre permitido — senão uma tarefa atrasada
+  ficaria impossível de editar sem escolher outra data.
 - Tags são digitadas em um único campo separado por vírgula; o servidor divide,
   remove espaços, descarta vazios e duplicados.
 - Tarefa nova entra no topo da lista do projeto.
@@ -100,7 +101,7 @@ pelo `DashboardController` a partir dos projetos do próprio usuário:
   edição da lista de tarefas.
 - **Timeline** — os prazos dos próximos 7 dias sobre um eixo de dias, com um
   ponto por tarefa na cor do seu status. As posições são calculadas no servidor,
-  no mesmo fuso em que os prazos são gravados e validados.
+  e "hoje" é o dia do relógio da interface (ver **Fuso horário** abaixo).
 
 Os quatro só existem no painel sem projeto aberto; com um projeto selecionado a
 área principal é a lista (ou o quadro) de tarefas dele.
@@ -543,7 +544,7 @@ resources/js/
 │                project-sidebar, panel, overview-panel, alerts-panel,
 │                timeline-panel, progress-panel, tag-chip, modal, buttons,
 │                icons, text-field, textarea-field, input-error,
-│                theme-toggle, view-toggle
+│                theme-toggle, view-toggle, brand
 ├── lib/         theme.ts, task-view.ts, storage.ts, utils.ts,
 │                native-validation.ts
 └── types/       task.ts, project.ts, progress.ts, auth.ts, index.ts,
@@ -579,9 +580,14 @@ Componentes centrais:
   em um lugar só, de modo que um painel novo só traga o conteúdo.
 - **`overview-panel`, `alerts-panel`, `timeline-panel` e `progress-panel`** — um
   arquivo por bloco. Nenhum deles calcula data, offset ou porcentagem: recebem
-  do servidor rótulos e posições já prontos, no fuso da aplicação, e desenham.
+  do servidor rótulos e posições já prontos, no fuso da interface, e desenham.
   Visão Geral e Alertas ficam lado a lado a partir de `lg` na mesma linha do
   grid, que é deixada esticar para que os dois terminem na mesma altura.
+- **`brand.tsx`** — o logotipo: o símbolo (`/taskly-mark.png`) seguido do nome.
+  O nome é texto vivo, não parte da imagem — a arte entregue escreve "Taskly" em
+  um azul-marinho que some contra o tema escuro, e texto ainda por cima continua
+  nítido em qualquer tamanho e é o que um leitor de tela anuncia, razão pela qual
+  o símbolo ao lado vai como decorativo (`alt=""`).
 - **`tag-chip.tsx`** — as classes são escritas por extenso porque o scanner do
   Tailwind precisa vê-las literais no código; a paleta é restrita a tons frios,
   reservando os quentes para estado.
@@ -594,17 +600,55 @@ preferência do sistema. O React Compiler está ligado
 (`babel-plugin-react-compiler` no `vite.config.ts`), e a saída do Wayfinder fica
 fora do lint e do formatador.
 
+### Marca e ícones
+
+A arte de origem (`taskly_ico.png`, 1024×1024) traz um selo "Made with AI" em um
+canto e cerca de um terço da tela em margem vazia, então cada tamanho gerado
+direto dela levaria o selo junto e desenharia o símbolo pequeno demais para ler
+em uma aba. Os arquivos em `public/` são recortados na arte em si e reescalados
+a partir dela:
+
+| Arquivo                                                        | Para quê                                                                                                                    |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `favicon.ico`                                                  | Aba e favoritos — 16, 32 e 48 px, cada um um PNG dentro do `.ico`, com alfa                                                 |
+| `favicon-96x96.png`                                            | O mesmo, em telas de densidade alta                                                                                         |
+| `apple-touch-icon.png`                                         | iOS — fundo branco, porque o sistema compõe transparência sobre preto                                                       |
+| `web-app-manifest-192x192.png`, `web-app-manifest-512x512.png` | `site.webmanifest`, `purpose: any maskable` — margem generosa porque só os 80% centrais sobrevivem ao recorte da plataforma |
+| `taskly-mark.png`                                              | O símbolo dentro da interface, via `brand.tsx`                                                                              |
+
+Não há `favicon.svg`: o símbolo é desenho rasterizado com traço de espessura
+variável, não vetor, então um SVG só poderia embrulhar os mesmos pixels — e o
+navegador que encontra um prefere-o, trocando o 16 px desenhado para a aba por
+uma redução de uma imagem bem maior.
+
 ### Regras de negócio implementadas
 
 **Prazo.** `due_at` é obrigatório e precisa ser `after_or_equal` a
-`StoreTaskRequest::earliestDeadline()`, que é `now()->startOfMinute()`. O
-arredondamento existe porque o input `datetime-local` não tem segundos:
-comparar com o segundo atual recusaria justamente o minuto que o seletor
-oferece. Na edição, `UpdateTaskRequest::keepsStoredDeadline()` compara o valor
-enviado com o gravado e, se forem iguais, remove a regra — uma tarefa atrasada
-continua editável, mas o prazo não pode ser apagado nem trocado por outra data
-passada. O instante de referência também vai para o front no prop `now`, para
-que seletor e validador nunca discordem.
+`StoreTaskRequest::earliestDeadline()`, que é
+`DeadlineClock::now($request)->startOfMinute()`. O arredondamento existe porque
+o input `datetime-local` não tem segundos: comparar com o segundo atual
+recusaria justamente o minuto que o seletor oferece. Na edição,
+`UpdateTaskRequest::keepsStoredDeadline()` compara o valor enviado com o gravado
+e, se forem iguais, remove a regra — uma tarefa atrasada continua editável, mas
+o prazo não pode ser apagado nem trocado por outra data passada. O instante de
+referência também vai para o front no prop `now`, para que seletor e validador
+nunca discordem.
+
+**Fuso horário.** Um prazo é uma leitura de relógio de parede, não um instante:
+o input `datetime-local` não manda fuso nenhum e a coluna guarda exatamente os
+dígitos escolhidos. Por isso "esse prazo já passou?" só tem resposta no relógio
+de quem escolheu. O front grava o fuso IANA do navegador
+(`Intl.DateTimeFormat().resolvedOptions().timeZone`) no cookie
+`interface_timezone`, escrito pelo script inline de `resources/views/app.blade.php`
+e deixado fora da criptografia de cookies em `bootstrap/app.php`.
+`App\DeadlineClock` lê esse cookie — descartando qualquer valor que o PHP não
+reconheça como fuso, já que é entrada do visitante — e devolve a hora de parede
+atual **rotulada com o fuso da aplicação**, para que ela se compare direto com
+um `due_at` vindo do banco sem que nenhum dos dois lados seja deslocado. Quem
+usa: a regra de validação, o prop `now` do seletor, o painel de Alertas e a
+janela da Timeline. Sem cookie — o primeiro carregamento de um navegador novo,
+ou a API, que não tem interface — vale o fuso da aplicação, que é o
+comportamento anterior.
 
 **Ordenação.** Existe **uma única** `position` por projeto, não uma ordem por
 coluna. As consultas são sempre `orderBy('position')->orderByDesc('id')`. Tarefa
@@ -676,7 +720,7 @@ exemplo do esqueleto.
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DashboardTest`                                  | Cada um dos quatro painéis conta e ordena o que deve, ignora o que é de outro usuário e sai vazio com um projeto aberto                                         |
 | `GamificationTest`                               | A conclusão é carimbada pelos quatro caminhos e limpa ao reabrir, XP e níveis batem, a sequência sobrevive ao dia de hoje e a medalha é entregue uma vez e fica |
-| `TaskDeadlineTest`                               | Prazo no passado é recusado, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo                                                     |
+| `TaskDeadlineTest`                               | Prazo no passado é recusado pelo relógio da interface, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo                           |
 | `TaskReorderTest`                                | A ordem é gravada, sobrevive a uma edição posterior, tarefa nova vai para o topo e listas que não são permutação são recusadas                                  |
 | `TaskMoveTest`                                   | Status e ordem mudam juntos ou não mudam, e tarefa de outro projeto dá 404                                                                                      |
 | `TaskStatusTest`                                 | Tarefa nasce `not_started`, percorre os quatro status e recusa status desconhecido                                                                              |
@@ -792,8 +836,9 @@ php artisan db:seed
 | `QUEUE_CONNECTION`                                                                      | `database` por padrão (ver nota sobre filas abaixo).                                                  |
 | `MAIL_MAILER`                                                                           | `log` no exemplo; a aplicação não envia e-mails hoje.                                                 |
 
-Observação: `config/app.php` fixa `timezone => 'UTC'`. As datas exibidas na
-interface são formatadas no servidor a partir desse fuso.
+Observação: `config/app.php` fixa `timezone => 'UTC'`, que é o fuso em que a
+aplicação grava e formata as datas. Prazos são a exceção — ver **Fuso horário**
+na seção de regras de negócio.
 
 ### Qualidade
 

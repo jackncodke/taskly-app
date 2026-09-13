@@ -1,5 +1,6 @@
 <?php
 
+use App\DeadlineClock;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\Support\Carbon;
@@ -125,4 +126,80 @@ test('the form is told the earliest deadline it may offer', function () {
     $this->actingAs($project->owner)
         ->get(route('projects.show', $project))
         ->assertInertia(fn ($page) => $page->where('now', '2026-09-11T14:30'));
+});
+
+test('accepts a deadline still ahead on the interface clock though behind the application one', function () {
+    // 22:30 of the 11th in São Paulo is already 01:30 of the 12th in UTC, so
+    // the whole evening looks past to a rule read on the application's clock.
+    Carbon::setTestNow(Carbon::parse('2026-09-12 01:30:00'));
+
+    $project = Project::factory()->create();
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'America/Sao_Paulo')
+        ->actingAs($project->owner)
+        ->post(route('tasks.store', $project), taskPayload([
+            'title' => 'Ainda hoje à noite',
+            'due_at' => '2026-09-11T23:00',
+        ]))
+        ->assertValid();
+
+    expect($project->tasks()->count())->toBe(1);
+});
+
+test('rejects a deadline already behind on the interface clock though ahead of the application one', function () {
+    // The mirror image: 14:30 UTC is 23:30 in Tokyo, so 20:00 is hours gone
+    // there while it still reads as the future in UTC.
+    Carbon::setTestNow(Carbon::parse('2026-09-11 14:30:00'));
+
+    $project = Project::factory()->create();
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'Asia/Tokyo')
+        ->actingAs($project->owner)
+        ->post(route('tasks.store', $project), taskPayload([
+            'title' => 'Já passou em Tóquio',
+            'due_at' => '2026-09-11T20:00',
+        ]))
+        ->assertInvalid('due_at');
+
+    expect($project->tasks()->count())->toBe(0);
+});
+
+test('rejects moving an existing deadline into the past on the interface clock', function () {
+    Carbon::setTestNow(Carbon::parse('2026-09-11 14:30:00'));
+
+    $project = Project::factory()->create();
+    $task = Task::factory()->for($project)->create(['due_at' => '2026-09-18 10:00:00']);
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'Asia/Tokyo')
+        ->actingAs($project->owner)
+        ->patch(route('tasks.update', $task), taskPayload([
+            'due_at' => '2026-09-11T20:00',
+        ]))
+        ->assertInvalid('due_at');
+});
+
+test('falls back to the application timezone when the cookie is not a zone', function () {
+    // The cookie is written by the browser, so it is visitor input: a value
+    // PHP does not know as a zone must not become one.
+    Carbon::setTestNow(Carbon::parse('2026-09-11 14:30:00'));
+
+    $project = Project::factory()->create();
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'Nowhere/Made_Up')
+        ->actingAs($project->owner)
+        ->post(route('tasks.store', $project), taskPayload([
+            'due_at' => '2026-09-11T14:29',
+        ]))
+        ->assertInvalid('due_at');
+});
+
+test('the earliest deadline the form may offer is read on the interface clock', function () {
+    Carbon::setTestNow(Carbon::parse('2026-09-11 14:30:45'));
+
+    $project = Project::factory()->create();
+
+    $this->withUnencryptedCookie(DeadlineClock::TIMEZONE_COOKIE, 'America/Sao_Paulo')
+        ->actingAs($project->owner)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn ($page) => $page->where('now', '2026-09-11T11:30'));
 });
