@@ -52,12 +52,12 @@ exposto por uma API REST versionada em `/api/v1`, autenticada por token.
 Os quatro status vivem no enum `App\TaskStatus` e são a mesma fonte para o
 dropdown, para as colunas do quadro e para a API:
 
-| Valor | Rótulo exibido |
-| --- | --- |
-| `not_started` | Não iniciada |
-| `in_progress` | Em andamento |
-| `completed` | Concluída |
-| `cancelled` | Cancelada |
+| Valor         | Rótulo exibido |
+| ------------- | -------------- |
+| `not_started` | Não iniciada   |
+| `in_progress` | Em andamento   |
+| `completed`   | Concluída      |
+| `cancelled`   | Cancelada      |
 
 - Alternância entre visão **lista** e visão **quadro** pelo botão no cabeçalho;
   a escolha fica salva no `localStorage` do navegador.
@@ -73,7 +73,7 @@ dropdown, para as colunas do quadro e para a API:
 
 - Até 10 arquivos por envio, 10 MB cada.
 - Tipos aceitos: `jpg, jpeg, png, gif, webp, pdf, doc, docx, xls, xlsx, txt,
-  csv, zip`.
+csv, zip`.
 - Arquivos vão para o disco **privado** (`local`, em `storage/app/private`) com
   nome gerado por hash; o nome original é guardado apenas como dado, para
   exibição e para o cabeçalho de download.
@@ -113,10 +113,10 @@ dropdown, para as colunas do quadro e para a API:
    editam e excluem o projeto.
 5. **Criar uma tarefa** — com um projeto aberto, use o botão "+ Tarefa" e
    preencha:
-   - Título, Descrição curta e Descrição completa (obrigatórios);
-   - Prazo (obrigatório; o seletor não oferece data/hora anterior à atual);
-   - Tags separadas por vírgula (opcional);
-   - Anexos (opcional, seleção múltipla).
+    - Título, Descrição curta e Descrição completa (obrigatórios);
+    - Prazo (obrigatório; o seletor não oferece data/hora anterior à atual);
+    - Tags separadas por vírgula (opcional);
+    - Anexos (opcional, seleção múltipla).
 6. **Mudar o status** — use o dropdown de status no próprio cartão da tarefa. A
    mudança é aplicada na hora, sem reenviar a tarefa inteira.
 7. **Reordenar** — na visão em lista, arraste a tarefa pela alça à esquerda; ou
@@ -139,26 +139,26 @@ dropdown, para as colunas do quadro e para a API:
 
 Todas as rotas abaixo, exceto as de convidado, exigem sessão autenticada.
 
-| Método | URI | Nome | Ação |
-| --- | --- | --- | --- |
-| GET | `/` | `login` | Formulário de login |
-| POST | `/` | `login.store` | Autenticar |
-| GET | `register` | `register` | Formulário de cadastro |
-| POST | `register` | `register.store` | Criar conta |
-| GET | `dashboard` | `dashboard` | Painel sem projeto selecionado |
-| GET | `projects/{project}` | `projects.show` | Painel com o projeto aberto |
-| POST | `projects` | `projects.store` | Criar projeto |
-| PATCH | `projects/{project}` | `projects.update` | Renomear projeto |
-| DELETE | `projects/{project}` | `projects.destroy` | Excluir projeto |
-| POST | `projects/{project}/tasks` | `tasks.store` | Criar tarefa |
-| PATCH | `projects/{project}/tasks/order` | `tasks.order` | Regravar a ordem |
-| PATCH | `projects/{project}/tasks/{task}/move` | `tasks.move` | Mover no quadro (status + ordem) |
-| PATCH | `tasks/{task}` | `tasks.update` | Editar tarefa |
-| PATCH | `tasks/{task}/status` | `tasks.status` | Trocar só o status |
-| DELETE | `tasks/{task}` | `tasks.destroy` | Excluir tarefa |
-| GET | `attachments/{attachment}` | `attachments.show` | Baixar anexo |
-| DELETE | `attachments/{attachment}` | `attachments.destroy` | Excluir anexo |
-| POST | `logout` | `logout` | Encerrar sessão |
+| Método | URI                                    | Nome                  | Ação                             |
+| ------ | -------------------------------------- | --------------------- | -------------------------------- |
+| GET    | `/`                                    | `login`               | Formulário de login              |
+| POST   | `/`                                    | `login.store`         | Autenticar                       |
+| GET    | `register`                             | `register`            | Formulário de cadastro           |
+| POST   | `register`                             | `register.store`      | Criar conta                      |
+| GET    | `dashboard`                            | `dashboard`           | Painel sem projeto selecionado   |
+| GET    | `projects/{project}`                   | `projects.show`       | Painel com o projeto aberto      |
+| POST   | `projects`                             | `projects.store`      | Criar projeto                    |
+| PATCH  | `projects/{project}`                   | `projects.update`     | Renomear projeto                 |
+| DELETE | `projects/{project}`                   | `projects.destroy`    | Excluir projeto                  |
+| POST   | `projects/{project}/tasks`             | `tasks.store`         | Criar tarefa                     |
+| PATCH  | `projects/{project}/tasks/order`       | `tasks.order`         | Regravar a ordem                 |
+| PATCH  | `projects/{project}/tasks/{task}/move` | `tasks.move`          | Mover no quadro (status + ordem) |
+| PATCH  | `tasks/{task}`                         | `tasks.update`        | Editar tarefa                    |
+| PATCH  | `tasks/{task}/status`                  | `tasks.status`        | Trocar só o status               |
+| DELETE | `tasks/{task}`                         | `tasks.destroy`       | Excluir tarefa                   |
+| GET    | `attachments/{attachment}`             | `attachments.show`    | Baixar anexo                     |
+| DELETE | `attachments/{attachment}`             | `attachments.destroy` | Excluir anexo                    |
+| POST   | `logout`                               | `logout`              | Encerrar sessão                  |
 
 Há ainda o endpoint de saúde `/up` fornecido pelo framework.
 
@@ -172,29 +172,29 @@ Sanctum em vez de cookie de sessão).
 
 ### Endpoints
 
-| Método | URI | Autenticação | Descrição |
-| --- | --- | --- | --- |
-| POST | `/api/v1/register` | pública | Cria conta e devolve o primeiro token |
-| POST | `/api/v1/login` | pública | Devolve `token` + `user` (201) |
-| GET | `/api/v1/statuses` | pública | Lista os status e seus rótulos |
-| POST | `/api/v1/logout` | token | Revoga apenas o token usado |
-| GET | `/api/v1/user` | token | Usuário dono do token |
-| GET | `/api/v1/projects` | token | Lista paginada (`per_page`, padrão 15) com `tasks_count` |
-| POST | `/api/v1/projects` | token | Cria projeto (201) |
-| GET | `/api/v1/projects/{project}` | token | Detalhe do projeto |
-| PUT/PATCH | `/api/v1/projects/{project}` | token | Atualiza projeto |
-| DELETE | `/api/v1/projects/{project}` | token | Exclui projeto (204) |
-| GET | `/api/v1/projects/{project}/tasks` | token | Tarefas do projeto, paginadas; filtro opcional `?status=` |
-| POST | `/api/v1/projects/{project}/tasks` | token | Cria tarefa (201) |
-| GET | `/api/v1/tasks/{task}` | token | Detalhe da tarefa com anexos |
-| PUT/PATCH | `/api/v1/tasks/{task}` | token | Atualização parcial (qualquer subconjunto, inclusive `status`) |
-| DELETE | `/api/v1/tasks/{task}` | token | Exclui tarefa (204) |
-| PUT | `/api/v1/projects/{project}/task-order` | token | Substitui a ordem inteira das tarefas |
-| PUT | `/api/v1/projects/{project}/tasks/{task}/position` | token | Move um cartão: status + ordem, em uma transação |
-| GET | `/api/v1/tasks/{task}/attachments` | token | Lista os anexos da tarefa |
-| POST | `/api/v1/tasks/{task}/attachments` | token | Envia arquivos (201) |
-| GET | `/api/v1/attachments/{attachment}` | token | Baixa o arquivo |
-| DELETE | `/api/v1/attachments/{attachment}` | token | Exclui o anexo (204) |
+| Método    | URI                                                | Autenticação | Descrição                                                      |
+| --------- | -------------------------------------------------- | ------------ | -------------------------------------------------------------- |
+| POST      | `/api/v1/register`                                 | pública      | Cria conta e devolve o primeiro token                          |
+| POST      | `/api/v1/login`                                    | pública      | Devolve `token` + `user` (201)                                 |
+| GET       | `/api/v1/statuses`                                 | pública      | Lista os status e seus rótulos                                 |
+| POST      | `/api/v1/logout`                                   | token        | Revoga apenas o token usado                                    |
+| GET       | `/api/v1/user`                                     | token        | Usuário dono do token                                          |
+| GET       | `/api/v1/projects`                                 | token        | Lista paginada (`per_page`, padrão 15) com `tasks_count`       |
+| POST      | `/api/v1/projects`                                 | token        | Cria projeto (201)                                             |
+| GET       | `/api/v1/projects/{project}`                       | token        | Detalhe do projeto                                             |
+| PUT/PATCH | `/api/v1/projects/{project}`                       | token        | Atualiza projeto                                               |
+| DELETE    | `/api/v1/projects/{project}`                       | token        | Exclui projeto (204)                                           |
+| GET       | `/api/v1/projects/{project}/tasks`                 | token        | Tarefas do projeto, paginadas; filtro opcional `?status=`      |
+| POST      | `/api/v1/projects/{project}/tasks`                 | token        | Cria tarefa (201)                                              |
+| GET       | `/api/v1/tasks/{task}`                             | token        | Detalhe da tarefa com anexos                                   |
+| PUT/PATCH | `/api/v1/tasks/{task}`                             | token        | Atualização parcial (qualquer subconjunto, inclusive `status`) |
+| DELETE    | `/api/v1/tasks/{task}`                             | token        | Exclui tarefa (204)                                            |
+| PUT       | `/api/v1/projects/{project}/task-order`            | token        | Substitui a ordem inteira das tarefas                          |
+| PUT       | `/api/v1/projects/{project}/tasks/{task}/position` | token        | Move um cartão: status + ordem, em uma transação               |
+| GET       | `/api/v1/tasks/{task}/attachments`                 | token        | Lista os anexos da tarefa                                      |
+| POST      | `/api/v1/tasks/{task}/attachments`                 | token        | Envia arquivos (201)                                           |
+| GET       | `/api/v1/attachments/{attachment}`                 | token        | Baixa o arquivo                                                |
+| DELETE    | `/api/v1/attachments/{attachment}`                 | token        | Exclui o anexo (204)                                           |
 
 Total: 21 rotas.
 
@@ -306,43 +306,43 @@ Pontos que valem saber antes de abrir o código:
 
 **`projects`**
 
-| Coluna | Tipo | Observação |
-| --- | --- | --- |
-| `id` | bigint PK | |
-| `user_id` | bigint FK → `users` | `cascadeOnDelete` |
-| `description` | string(255) | único campo do projeto |
-| `created_at` / `updated_at` | timestamp | |
+| Coluna                      | Tipo                | Observação             |
+| --------------------------- | ------------------- | ---------------------- |
+| `id`                        | bigint PK           |                        |
+| `user_id`                   | bigint FK → `users` | `cascadeOnDelete`      |
+| `description`               | string(255)         | único campo do projeto |
+| `created_at` / `updated_at` | timestamp           |                        |
 
 **`tasks`**
 
-| Coluna | Tipo | Observação |
-| --- | --- | --- |
-| `id` | bigint PK | |
-| `project_id` | bigint FK → `projects` | `cascadeOnDelete` |
-| `position` | integer, default `0` | ordem manual dentro do projeto |
-| `title` | string(255) | |
-| `short_description` | string(255) nullable | obrigatória na validação |
-| `description` | text nullable | obrigatória na validação |
-| `status` | string, default `not_started` | valor de `App\TaskStatus` |
-| `due_at` | timestamp nullable | obrigatório na validação |
-| `tags` | json, default `'[]'` | lista de strings |
-| `created_at` / `updated_at` | timestamp | |
+| Coluna                      | Tipo                          | Observação                     |
+| --------------------------- | ----------------------------- | ------------------------------ |
+| `id`                        | bigint PK                     |                                |
+| `project_id`                | bigint FK → `projects`        | `cascadeOnDelete`              |
+| `position`                  | integer, default `0`          | ordem manual dentro do projeto |
+| `title`                     | string(255)                   |                                |
+| `short_description`         | string(255) nullable          | obrigatória na validação       |
+| `description`               | text nullable                 | obrigatória na validação       |
+| `status`                    | string, default `not_started` | valor de `App\TaskStatus`      |
+| `due_at`                    | timestamp nullable            | obrigatório na validação       |
+| `tags`                      | json, default `'[]'`          | lista de strings               |
+| `created_at` / `updated_at` | timestamp                     |                                |
 
 Índices: `[project_id, created_at]` e `[project_id, position]` — os dois modos
 como a lista é lida.
 
 **`task_attachments`**
 
-| Coluna | Tipo | Observação |
-| --- | --- | --- |
-| `id` | bigint PK | |
-| `task_id` | bigint FK → `tasks` | `cascadeOnDelete` |
-| `disk` | string | gravado por linha, não lido do config |
-| `path` | string | nome hasheado gerado pelo Laravel |
-| `original_name` | string | só dado de exibição; nunca vira caminho |
-| `mime_type` | string | detectado a partir do conteúdo do arquivo |
-| `size` | unsigned bigint | bytes |
-| `created_at` / `updated_at` | timestamp | |
+| Coluna                      | Tipo                | Observação                                |
+| --------------------------- | ------------------- | ----------------------------------------- |
+| `id`                        | bigint PK           |                                           |
+| `task_id`                   | bigint FK → `tasks` | `cascadeOnDelete`                         |
+| `disk`                      | string              | gravado por linha, não lido do config     |
+| `path`                      | string              | nome hasheado gerado pelo Laravel         |
+| `original_name`             | string              | só dado de exibição; nunca vira caminho   |
+| `mime_type`                 | string              | detectado a partir do conteúdo do arquivo |
+| `size`                      | unsigned bigint     | bytes                                     |
+| `created_at` / `updated_at` | timestamp           |                                           |
 
 **`personal_access_tokens`** — tabela padrão do Sanctum (`tokenable` morph,
 `token` com o hash e índice único, `abilities`, `last_used_at`, `expires_at`).
@@ -376,15 +376,15 @@ pelo domínio: `users` (com `email` unique), `password_reset_tokens`, `sessions`
 
 ### Backend
 
-| Camada | Onde | Papel |
-| --- | --- | --- |
-| Controllers web | `app/Http/Controllers` | Respondem à interface Inertia |
-| Controllers da API | `app/Http/Controllers/Api/V1` | Respondem JSON |
-| Form Requests | `app/Http/Requests` | Validação, normalização e parte da autorização |
-| Resources | `app/Http/Resources` | Representação JSON da API |
-| Policies | `app/Policies` | Ownership (`view`, `update`, `delete`) |
-| Enum | `app/TaskStatus.php` | Status, rótulos e ordem das colunas |
-| Providers | `app/Providers/AppServiceProvider.php` | Decisões globais e rate limit |
+| Camada             | Onde                                   | Papel                                          |
+| ------------------ | -------------------------------------- | ---------------------------------------------- |
+| Controllers web    | `app/Http/Controllers`                 | Respondem à interface Inertia                  |
+| Controllers da API | `app/Http/Controllers/Api/V1`          | Respondem JSON                                 |
+| Form Requests      | `app/Http/Requests`                    | Validação, normalização e parte da autorização |
+| Resources          | `app/Http/Resources`                   | Representação JSON da API                      |
+| Policies           | `app/Policies`                         | Ownership (`view`, `update`, `delete`)         |
+| Enum               | `app/TaskStatus.php`                   | Status, rótulos e ordem das colunas            |
+| Providers          | `app/Providers/AppServiceProvider.php` | Decisões globais e rate limit                  |
 
 Detalhes que não são óbvios pelos nomes:
 
@@ -534,16 +534,16 @@ o helper global `taskPayload()`, usado por quase todo teste de tarefa. Toda a
 cobertura real está em `tests/Feature` (21 arquivos); `tests/Unit` tem apenas o
 exemplo do esqueleto.
 
-| Arquivo | O que garante |
-| --- | --- |
-| `TaskDeadlineTest` | Prazo no passado é recusado, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo |
-| `TaskReorderTest` | A ordem é gravada, sobrevive a uma edição posterior, tarefa nova vai para o topo e listas que não são permutação são recusadas |
-| `TaskMoveTest` | Status e ordem mudam juntos ou não mudam, e tarefa de outro projeto dá 404 |
-| `TaskStatusTest` | Tarefa nasce `not_started`, percorre os quatro status e recusa status desconhecido |
-| `LocalizationTest` | Nenhuma mensagem do framework ficou em inglês |
-| `Models/UserTest` | E-mail é canonizado e o índice unique pega variações de caixa |
-| `Policies/ProjectPolicyTest` | A negação chega como 404 |
-| `Api/V1/RateLimitTest` | 60/min por usuário do token, com fallback por IP e 429 ao estourar |
+| Arquivo                                          | O que garante                                                                                                                          |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `TaskDeadlineTest`                               | Prazo no passado é recusado, o minuto atual é aceito e tarefa atrasada continua editável sem trocar o prazo                            |
+| `TaskReorderTest`                                | A ordem é gravada, sobrevive a uma edição posterior, tarefa nova vai para o topo e listas que não são permutação são recusadas         |
+| `TaskMoveTest`                                   | Status e ordem mudam juntos ou não mudam, e tarefa de outro projeto dá 404                                                             |
+| `TaskStatusTest`                                 | Tarefa nasce `not_started`, percorre os quatro status e recusa status desconhecido                                                     |
+| `LocalizationTest`                               | Nenhuma mensagem do framework ficou em inglês                                                                                          |
+| `Models/UserTest`                                | E-mail é canonizado e o índice unique pega variações de caixa                                                                          |
+| `Policies/ProjectPolicyTest`                     | A negação chega como 404                                                                                                               |
+| `Api/V1/RateLimitTest`                           | 60/min por usuário do token, com fallback por IP e 429 ao estourar                                                                     |
 | `Api/V1/Auth/AuthenticatedSessionControllerTest` | Emissão de token, e-mail sem distinção de caixa, mensagem única de erro, bloqueio após cinco tentativas e revogação só do token em uso |
 
 ---
@@ -552,18 +552,18 @@ exemplo do esqueleto.
 
 ### Stack
 
-| Camada | Tecnologia |
-| --- | --- |
-| Runtime | PHP 8.4 (o `composer.json` exige `^8.3`; o CI roda 8.4) |
-| Framework | Laravel 13 |
-| Ponte SPA | Inertia v3 (`inertiajs/inertia-laravel` 3.x + `@inertiajs/react` 3.x) |
-| Front-end | React 19 + TypeScript 5.7 + Tailwind CSS 4 |
-| Build | Vite 8 via `vite-plus` |
-| Rotas tipadas | Laravel Wayfinder |
-| API tokens | Laravel Sanctum 4 |
-| Banco | PostgreSQL |
-| Testes | Pest 5 (+ `pest-plugin-laravel`) |
-| Estilo / estática | Laravel Pint, Larastan (PHPStan nível 7) |
+| Camada            | Tecnologia                                                            |
+| ----------------- | --------------------------------------------------------------------- |
+| Runtime           | PHP 8.4 (o `composer.json` exige `^8.3`; o CI roda 8.4)               |
+| Framework         | Laravel 13                                                            |
+| Ponte SPA         | Inertia v3 (`inertiajs/inertia-laravel` 3.x + `@inertiajs/react` 3.x) |
+| Front-end         | React 19 + TypeScript 5.7 + Tailwind CSS 4                            |
+| Build             | Vite 8 via `vite-plus`                                                |
+| Rotas tipadas     | Laravel Wayfinder                                                     |
+| API tokens        | Laravel Sanctum 4                                                     |
+| Banco             | PostgreSQL                                                            |
+| Testes            | Pest 5 (+ `pest-plugin-laravel`)                                      |
+| Estilo / estática | Laravel Pint, Larastan (PHPStan nível 7)                              |
 
 ### Pré-requisitos
 
@@ -638,19 +638,19 @@ php artisan db:seed
 
 ### Variáveis de ambiente relevantes
 
-| Variável | Uso |
-| --- | --- |
-| `APP_NAME` | Título da aba do navegador (`config('app.name')`). O nome "Taskly" no cabeçalho é fixo no componente. |
-| `APP_ENV` / `APP_DEBUG` | `local`/`true` em desenvolvimento; `production`/`false` em produção. |
-| `APP_KEY` | Chave de criptografia; gerada por `php artisan key:generate`. |
-| `APP_URL` | Base para geração de URLs absolutas. |
-| `APP_LOCALE` / `APP_FALLBACK_LOCALE` | `pt_BR` — único idioma com traduções em `lang/`. |
-| `DB_CONNECTION` / `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | Conexão PostgreSQL. |
-| `FILESYSTEM_DISK` | `local` — anexos ficam em `storage/app/private`. |
-| `SESSION_DRIVER` | `database` por padrão (a tabela `sessions` vem na migration inicial). |
-| `CACHE_STORE` | `database` por padrão. |
-| `QUEUE_CONNECTION` | `database` por padrão (ver nota sobre filas abaixo). |
-| `MAIL_MAILER` | `log` no exemplo; a aplicação não envia e-mails hoje. |
+| Variável                                                                                | Uso                                                                                                   |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `APP_NAME`                                                                              | Título da aba do navegador (`config('app.name')`). O nome "Taskly" no cabeçalho é fixo no componente. |
+| `APP_ENV` / `APP_DEBUG`                                                                 | `local`/`true` em desenvolvimento; `production`/`false` em produção.                                  |
+| `APP_KEY`                                                                               | Chave de criptografia; gerada por `php artisan key:generate`.                                         |
+| `APP_URL`                                                                               | Base para geração de URLs absolutas.                                                                  |
+| `APP_LOCALE` / `APP_FALLBACK_LOCALE`                                                    | `pt_BR` — único idioma com traduções em `lang/`.                                                      |
+| `DB_CONNECTION` / `DB_HOST` / `DB_PORT` / `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | Conexão PostgreSQL.                                                                                   |
+| `FILESYSTEM_DISK`                                                                       | `local` — anexos ficam em `storage/app/private`.                                                      |
+| `SESSION_DRIVER`                                                                        | `database` por padrão (a tabela `sessions` vem na migration inicial).                                 |
+| `CACHE_STORE`                                                                           | `database` por padrão.                                                                                |
+| `QUEUE_CONNECTION`                                                                      | `database` por padrão (ver nota sobre filas abaixo).                                                  |
+| `MAIL_MAILER`                                                                           | `log` no exemplo; a aplicação não envia e-mails hoje.                                                 |
 
 Observação: `config/app.php` fixa `timezone => 'UTC'`. As datas exibidas na
 interface são formatadas no servidor a partir desse fuso.
@@ -695,13 +695,13 @@ O workflow `.github/workflows/tests.yml` roda `composer setup` seguido de
   `resources/js/routes`, `resources/js/wayfinder`) é ignorada pelo Git. Depois
   de clonar, e sempre que rotas ou controllers mudarem, rode:
 
-  ```bash
-  php artisan wayfinder:generate --with-form
-  ```
+    ```bash
+    php artisan wayfinder:generate --with-form
+    ```
 
-  O `--with-form` é obrigatório porque o `vite.config.ts` declara
-  `wayfinder({ formVariants: true })`. Sem ele, as variantes `.form()` não são
-  geradas e `npm run types:check` quebra.
+    O `--with-form` é obrigatório porque o `vite.config.ts` declara
+    `wayfinder({ formVariants: true })`. Sem ele, as variantes `.form()` não são
+    geradas e `npm run types:check` quebra.
 
 - **PostgreSQL precisa estar de pé antes do `migrate`** (e antes dos testes). Os
   dois bancos, `taskly_db` e `taskly_db_test`, precisam existir.
@@ -816,8 +816,8 @@ Git), que não definiram comportamento do sistema.
 
 > todos os e-mail sempre devem ser gravados em letra minuscula como padrão
 
-*Deste último saiu o mutator `User::email()` e o teste que garante que o índice
-unique enxerga variações de caixa como o mesmo e-mail.*
+_Deste último saiu o mutator `User::email()` e o teste que garante que o índice
+unique enxerga variações de caixa como o mesmo e-mail._
 
 ### 2. Projetos
 
@@ -834,7 +834,7 @@ unique enxerga variações de caixa como o mesmo e-mail.*
 > Cada projeto é vinculado ao usuário logado, o usuário somente poderá ver os
 > projetos criados por ele.
 
-*A última frase virou as policies e a decisão de negar como 404 em vez de 403.*
+_A última frase virou as policies e a decisão de negar como 404 em vez de 403._
 
 ### 3. Tarefas
 
@@ -851,15 +851,15 @@ unique enxerga variações de caixa como o mesmo e-mail.*
 > poder mudar permanentemente a ordem da tarefa utilizando o recurso drag and
 > drop
 
-*"permanentemente" é o motivo da coluna `position` e da migration de backfill.*
+_"permanentemente" é o motivo da coluna `position` e da migration de backfill._
 
 > no formulario o titulo, descrição curta, descrição completa e prazo são
 > obrigatorios
 
 > nao permita que o prazo da tarefa seja anterior que a data e hora atuais
 
-*Daqui saíram `earliestDeadline()` e, na sequência, a exceção que mantém uma
-tarefa atrasada editável sem obrigar a escolher outro prazo.*
+_Daqui saíram `earliestDeadline()` e, na sequência, a exceção que mantém uma
+tarefa atrasada editável sem obrigar a escolher outro prazo._
 
 ### 4. Status e quadro kanban
 
@@ -879,8 +879,8 @@ tarefa atrasada editável sem obrigar a escolher outro prazo.*
 
 > mude as cores dos quadros do kanban de acordo com o status da tarefa
 
-*O conjunto produziu o enum `App\TaskStatus`, o `styleFor()` como fonte única
-dos tons e a gravação de status e posição em uma só transação.*
+_O conjunto produziu o enum `App\TaskStatus`, o `styleFor()` como fonte única
+dos tons e a gravação de status e posição em uma só transação._
 
 ### 5. Tema e visual
 
@@ -893,8 +893,8 @@ dos tons e a gravação de status e posição em uma só transação.*
 
 > use somente cores frias para as tags, evite cores quentes
 
-*A restrição a tons frios é o que deixa os tons quentes livres para sinalizar
-estado.*
+_A restrição a tons frios é o que deixa os tons quentes livres para sinalizar
+estado._
 
 ### 6. Localização
 
@@ -904,8 +904,8 @@ estado.*
 > quando eu clico em salvar, corrigir para exibir as mensagens ao usuário em
 > portugues-brasil
 
-*O segundo pedido gerou o `LocalizationTest`, que hoje falha se qualquer
-mensagem do framework voltar a aparecer em inglês.*
+_O segundo pedido gerou o `LocalizationTest`, que hoje falha se qualquer
+mensagem do framework voltar a aparecer em inglês._
 
 ### 7. API, documentação e ajustes
 
@@ -919,12 +919,12 @@ mensagem do framework voltar a aparecer em inglês.*
 
 ### Dos prompts aos commits
 
-| Commit | Etapas correspondentes |
-| --- | --- |
-| `27581f4` Initial commit: Taskly with authentication and project management | 1 e 2 |
-| `d121287` Add task management with attachments, statuses and ordering | 3, 4 e 5 (status e tags) |
-| `401a619` Add light/dark theme toggle to the app header | 5 (tema) |
-| `c29b7a7` Add kanban board, deadline rules and Portuguese messages | 3 (prazo), 4 (quadro) e 6 |
-| `2ecff9b` Tint board columns to match their status | 4 (cores das colunas) |
-| `51c4d9f` Add a REST API layer under /api/v1 | 7 |
-| `77b46c7` Add project README | 7 |
+| Commit                                                                      | Etapas correspondentes    |
+| --------------------------------------------------------------------------- | ------------------------- |
+| `27581f4` Initial commit: Taskly with authentication and project management | 1 e 2                     |
+| `d121287` Add task management with attachments, statuses and ordering       | 3, 4 e 5 (status e tags)  |
+| `401a619` Add light/dark theme toggle to the app header                     | 5 (tema)                  |
+| `c29b7a7` Add kanban board, deadline rules and Portuguese messages          | 3 (prazo), 4 (quadro) e 6 |
+| `2ecff9b` Tint board columns to match their status                          | 4 (cores das colunas)     |
+| `51c4d9f` Add a REST API layer under /api/v1                                | 7                         |
+| `77b46c7` Add project README                                                | 7                         |
