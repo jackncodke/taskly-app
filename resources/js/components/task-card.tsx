@@ -85,12 +85,25 @@ export function AttachmentChip({
  * rather than dissolving into it — the same relationship the neutral pair had
  * before any status had a colour.
  */
-type StatusStyle = { card: string; select: string; column: string };
+type StatusStyle = {
+    card: string;
+    select: string;
+    column: string;
+    mark: string;
+};
 
+/**
+ * `mark` is the solid fill for a small shape — the dot and its leader on the
+ * timeline. It is one step deeper than the tints above because a 10px dot has
+ * to hold its colour against the surface where a whole card does not, and it
+ * is the same value in both themes: these steps clear the contrast floor on
+ * the light and the dark surface alike, so the dot does not need a variant.
+ */
 const neutralStatusStyle: StatusStyle = {
     card: 'border-[#e3e3e0] dark:border-[#3E3E3A]',
     select: 'border-[#e3e3e0] text-[#706f6c] dark:border-[#3E3E3A] dark:text-[#A1A09A]',
     column: 'border-[#e3e3e0] bg-[#f7f7f5] dark:border-[#3E3E3A] dark:bg-[#141413]',
+    mark: 'bg-[#8a8984]',
 };
 
 const statusStyles: Record<string, StatusStyle> = {
@@ -98,16 +111,19 @@ const statusStyles: Record<string, StatusStyle> = {
         card: 'border-blue-300 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40',
         select: 'border-blue-300 text-blue-800 dark:border-blue-800 dark:text-blue-300',
         column: 'border-blue-300 bg-blue-100/70 dark:border-blue-900 dark:bg-blue-950/25',
+        mark: 'bg-blue-500',
     },
     completed: {
         card: 'border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/40',
         select: 'border-green-300 text-green-800 dark:border-green-800 dark:text-green-300',
         column: 'border-green-300 bg-green-100/70 dark:border-green-900 dark:bg-green-950/25',
+        mark: 'bg-green-600',
     },
     cancelled: {
         card: 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40',
         select: 'border-red-300 text-red-800 dark:border-red-800 dark:text-red-300',
         column: 'border-red-300 bg-red-100/70 dark:border-red-900 dark:bg-red-950/25',
+        mark: 'bg-red-500',
     },
 };
 
